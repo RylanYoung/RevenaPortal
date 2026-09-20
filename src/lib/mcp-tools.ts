@@ -98,8 +98,134 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_dispute_queue",
     description:
-      "Replacement requests waiting on a decision — leads a client has flagged as bad. Nothing changes on their pack until these are resolved.",
+      "Replacement requests waiting on a decision — leads a client has flagged as bad. Nothing changes on their pack until these are resolved. Returns lead ids for use with resolve_replacement.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "update_client",
+    description:
+      "Change a client's details or status. Only the fields you pass are changed. Set status to 'paused' to stop new leads counting against a pack, or 'churned' when they leave.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string", description: "Client UUID" },
+        business_name: { type: "string", description: "Or identify them by name" },
+        new_business_name: { type: "string", description: "Rename the business" },
+        contact_name: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        phone_number: { type: "string", description: "Alias for phone" },
+        service_type: { type: "string", enum: ["residential", "commercial", "both"] },
+        region: { type: "string" },
+        ghl_tag_reference: {
+          type: "string",
+          description: "The GHL tag that routes leads here. Must stay unique.",
+        },
+        status: { type: "string", enum: ["active", "paused", "churned"] },
+        notes: { type: "string", description: "Internal notes, never shown to the client" },
+      },
+    },
+  },
+  {
+    name: "delete_client",
+    description:
+      "Permanently delete a client, their packs and their portal logins. Their leads are kept but become unassigned. This cannot be undone — you must pass confirm: true.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        business_name: { type: "string" },
+        confirm: {
+          type: "boolean",
+          description: "Must be true. A guard against deleting the wrong business.",
+        },
+      },
+      required: ["confirm"],
+    },
+  },
+  {
+    name: "invite_portal_user",
+    description:
+      "Give someone a login to a client's portal, or resend the link if they already have one. Emails them a magic link — no password involved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        business_name: { type: "string", description: "Or identify the client by name" },
+        email: { type: "string", description: "Who to invite" },
+      },
+      required: ["email"],
+    },
+  },
+  {
+    name: "remove_portal_user",
+    description:
+      "Revoke someone's access to the portal. Their login still exists but reaches nothing.",
+    inputSchema: {
+      type: "object",
+      properties: { email: { type: "string" } },
+      required: ["email"],
+    },
+  },
+  {
+    name: "list_portal_users",
+    description: "Who can log in, and which client they belong to.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        business_name: { type: "string", description: "Omit both to list everyone" },
+      },
+    },
+  },
+  {
+    name: "resolve_replacement",
+    description:
+      "Decide a replacement request. Approving is the ONLY thing that stops a lead counting against a client's pack. Get lead ids from get_dispute_queue.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string" },
+        decision: {
+          type: "string",
+          enum: ["approve", "decline"],
+          description: "approve credits the lead back; decline leaves it counted",
+        },
+        note: { type: "string", description: "Why — shown to the client if declined" },
+      },
+      required: ["lead_id", "decision"],
+    },
+  },
+  {
+    name: "list_leads",
+    description: "Recent leads, optionally filtered by client or delivery status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        business_name: { type: "string", description: "Or identify the client by name" },
+        status: {
+          type: "string",
+          enum: ["delivered", "replacement_requested", "replaced", "request_declined"],
+        },
+        unassigned: { type: "boolean", description: "Only leads with no client" },
+        limit: { type: "number", description: "Default 25" },
+      },
+    },
+  },
+  {
+    name: "assign_lead",
+    description:
+      "Place an unassigned lead with a client, or move a mis-routed one. Attaches it to that client's active pack so it starts counting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string" },
+        client_id: { type: "string" },
+        business_name: { type: "string", description: "Or identify the client by name" },
+      },
+      required: ["lead_id"],
+    },
   },
 ];
 
@@ -376,13 +502,296 @@ export async function callTool(
             `${l.name ?? "no name"} (${l.postcode ?? "?"})`,
             `reason: ${l.flag_reason ?? "none given"}`,
             l.flag_note ? `note: "${l.flag_note}"` : null,
+            `id ${l.id}`,
           ]
             .filter(Boolean)
             .join(" — ")
         ),
         "",
-        "Resolve these at /admin/requests — approving a replacement is the only thing that credits a lead back.",
+        "Resolve with resolve_replacement(lead_id, approve|decline) — approving is the only thing that credits a lead back.",
       ].join("\n");
+    }
+
+    // ---------------------------------------------------------------
+    case "update_client": {
+      const found = await findClient(args);
+      if ("error" in found) return found.error;
+      const client = found.client;
+
+      // Only what was actually passed — an omitted field must not be blanked.
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const rename = str(args, "new_business_name");
+      if (rename) patch.business_name = rename;
+      for (const f of ["contact_name", "email", "region", "notes", "service_type", "status", "ghl_tag_reference"]) {
+        const v = str(args, f);
+        if (v) patch[f] = v;
+      }
+      const phone = str(args, "phone") ?? str(args, "phone_number");
+      if (phone) patch.phone = phone;
+
+      if (Object.keys(patch).length === 1) {
+        return "Nothing to change — pass at least one field.";
+      }
+
+      const { error } = await db.from("clients").update(patch).eq("id", client.id);
+      if (error) {
+        if (error.code === "23505") {
+          return "Another client already uses that GHL tag. Tags must be unique or leads can't be routed.";
+        }
+        return `Could not update: ${error.message}`;
+      }
+
+      const changed = Object.keys(patch).filter((k) => k !== "updated_at");
+      return `Updated ${rename ?? client.business_name}: ${changed.join(", ")}.`;
+    }
+
+    // ---------------------------------------------------------------
+    case "delete_client": {
+      if (args.confirm !== true) {
+        return "Not deleted. Pass confirm: true to go ahead — this can't be undone.";
+      }
+      const found = await findClient(args);
+      if ("error" in found) return found.error;
+      const client = found.client;
+
+      // Count first, so the confirmation can say what actually went.
+      const [{ count: leadCount }, { count: packCount }] = await Promise.all([
+        db.from("leads").select("id", { count: "exact", head: true }).eq("client_id", client.id),
+        db.from("packs").select("id", { count: "exact", head: true }).eq("client_id", client.id),
+      ]);
+
+      const { error } = await db.from("clients").delete().eq("id", client.id);
+      if (error) return `Could not delete: ${error.message}`;
+
+      return [
+        `Deleted ${client.business_name} along with ${packCount ?? 0} pack(s) and their portal logins.`,
+        `${leadCount ?? 0} lead(s) were kept and are now unassigned — place them with assign_lead if they belong elsewhere.`,
+      ].join(" ");
+    }
+
+    // ---------------------------------------------------------------
+    case "invite_portal_user": {
+      const email = str(args, "email")?.toLowerCase();
+      if (!email) return "email is required.";
+
+      const found = await findClient(args);
+      if ("error" in found) return found.error;
+      const client = found.client;
+
+      const redirectTo = `${origin}/portal/auth/callback`;
+
+      // Already has a login? Then this is a resend, and inviteUserByEmail
+      // would fail — signInWithOtp is the call that works for existing users.
+      const { data: list } = await db.auth.admin.listUsers();
+      const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
+
+      if (existing) {
+        await db.from("portal_users").upsert({
+          id: existing.id,
+          client_id: client.id,
+          email,
+          role: "client_admin",
+        });
+
+        const url = process.env.SUPABASE_URL;
+        const anon = process.env.SUPABASE_ANON_KEY;
+        if (!url || !anon) return "Supabase anon key isn't configured, so the link can't be sent.";
+
+        const { createClient: createSupabase } = await import("@supabase/supabase-js");
+        const auth = createSupabase(url, anon, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { error } = await auth.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
+        });
+        if (error) return `Linked to ${client.business_name}, but the email failed: ${error.message}`;
+        return `${email} already had a login — linked to ${client.business_name} and sent a fresh link.`;
+      }
+
+      const { data: invited, error: inviteError } =
+        await db.auth.admin.inviteUserByEmail(email, { redirectTo });
+      if (inviteError || !invited.user) {
+        return `Invite failed: ${inviteError?.message ?? "unknown error"}`;
+      }
+
+      const { error } = await db.from("portal_users").upsert({
+        id: invited.user.id,
+        client_id: client.id,
+        email,
+        role: "client_admin",
+      });
+      if (error) return `Invite sent but linking failed: ${error.message}`;
+
+      return `Invited ${email} to ${client.business_name}'s portal.`;
+    }
+
+    // ---------------------------------------------------------------
+    case "remove_portal_user": {
+      const email = str(args, "email")?.toLowerCase();
+      if (!email) return "email is required.";
+
+      const { data: rows } = await db
+        .from("portal_users")
+        .delete()
+        .eq("email", email)
+        .select("email");
+
+      if (!rows?.length) return `No portal access found for ${email}.`;
+      return `${email} can no longer reach the portal.`;
+    }
+
+    // ---------------------------------------------------------------
+    case "list_portal_users": {
+      let q = db.from("portal_users").select("email, role, client_id");
+      if (str(args, "client_id") || str(args, "business_name")) {
+        const found = await findClient(args);
+        if ("error" in found) return found.error;
+        q = q.eq("client_id", found.client.id);
+      }
+      const { data } = await q;
+      const rows = (data ?? []) as { email: string; role: string; client_id: string }[];
+      if (!rows.length) return "Nobody has portal access yet.";
+
+      const { data: clientRows } = await db.from("clients").select("id, business_name");
+      const names = new Map(
+        ((clientRows ?? []) as Pick<Client, "id" | "business_name">[]).map((c) => [c.id, c.business_name])
+      );
+      return rows
+        .map((r) => `${r.email} — ${names.get(r.client_id) ?? "unknown client"} (${r.role})`)
+        .join("\n");
+    }
+
+    // ---------------------------------------------------------------
+    case "resolve_replacement": {
+      const leadId = str(args, "lead_id");
+      const decision = str(args, "decision");
+      if (!leadId) return "lead_id is required — get them from get_dispute_queue.";
+      if (decision !== "approve" && decision !== "decline") {
+        return "decision must be 'approve' or 'decline'.";
+      }
+
+      const { data: lead } = await db
+        .from("leads")
+        .select("id, status, client_id, name")
+        .eq("id", leadId)
+        .maybeSingle();
+
+      if (!lead) return `No lead with id ${leadId}.`;
+      if (lead.status !== "replacement_requested") {
+        return `That lead isn't awaiting a decision — it's currently '${lead.status}'.`;
+      }
+
+      const newStatus = decision === "approve" ? "replaced" : "request_declined";
+      const note = str(args, "note");
+
+      const { error } = await db
+        .from("leads")
+        .update({
+          status: newStatus,
+          resolved_at: new Date().toISOString(),
+          resolution_note: note,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leadId);
+      if (error) return `Could not resolve: ${error.message}`;
+
+      await db.from("lead_events").insert({
+        lead_id: leadId,
+        event_type: "resolved",
+        old_value: "replacement_requested",
+        new_value: newStatus,
+        actor: "admin (via MCP)",
+        note,
+      });
+
+      return decision === "approve"
+        ? `Approved. ${lead.name ?? "That lead"} no longer counts against their pack.`
+        : `Declined. ${lead.name ?? "That lead"} still counts against their pack.`;
+    }
+
+    // ---------------------------------------------------------------
+    case "list_leads": {
+      let q = db
+        .from("leads")
+        .select("*")
+        .order("received_at", { ascending: false })
+        .limit(num(args, "limit") ?? 25);
+
+      if (args.unassigned === true) {
+        q = q.is("client_id", null);
+      } else if (str(args, "client_id") || str(args, "business_name")) {
+        const found = await findClient(args);
+        if ("error" in found) return found.error;
+        q = q.eq("client_id", found.client.id);
+      }
+      const status = str(args, "status");
+      if (status) q = q.eq("status", status);
+
+      const { data, error } = await q;
+      if (error) return `Could not read leads: ${error.message}`;
+      const leads = (data ?? []) as Lead[];
+      if (!leads.length) return "No leads match.";
+
+      const { data: clientRows } = await db.from("clients").select("id, business_name");
+      const names = new Map(
+        ((clientRows ?? []) as Pick<Client, "id" | "business_name">[]).map((c) => [c.id, c.business_name])
+      );
+
+      return leads
+        .map(
+          (l) =>
+            `${new Date(l.received_at).toLocaleDateString("en-AU")} — ${l.name ?? "no name"} (${l.postcode ?? "?"}) — ${
+              l.client_id ? names.get(l.client_id) ?? "unknown" : "UNASSIGNED"
+            } — ${l.status}${l.flag_reason ? ` [${l.flag_reason}]` : ""} — id ${l.id}`
+        )
+        .join("\n");
+    }
+
+    // ---------------------------------------------------------------
+    case "assign_lead": {
+      const leadId = str(args, "lead_id");
+      if (!leadId) return "lead_id is required — get them from list_leads.";
+
+      const found = await findClient(args);
+      if ("error" in found) return found.error;
+      const client = found.client;
+
+      const { data: before } = await db
+        .from("leads")
+        .select("client_id")
+        .eq("id", leadId)
+        .maybeSingle();
+      if (!before) return `No lead with id ${leadId}.`;
+
+      const { data: pack } = await db
+        .from("packs")
+        .select("id")
+        .eq("client_id", client.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      const { error } = await db
+        .from("leads")
+        .update({
+          client_id: client.id,
+          pack_id: pack?.id ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leadId);
+      if (error) return `Could not assign: ${error.message}`;
+
+      await db.from("lead_events").insert({
+        lead_id: leadId,
+        event_type: before.client_id ? "reassigned" : "assigned",
+        old_value: before.client_id ?? "unassigned",
+        new_value: client.id,
+        actor: "admin (via MCP)",
+      });
+
+      return pack
+        ? `Assigned to ${client.business_name} and counted against their active pack.`
+        : `Assigned to ${client.business_name}, but they have no active pack so it isn't counting against one.`;
     }
 
     default:
