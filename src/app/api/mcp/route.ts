@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const text = await callTool(name, args);
+        const text = await callTool(name, args, request.nextUrl.origin);
         return result(id, { content: [{ type: "text", text }] });
       } catch (error) {
         // Surfaced as a tool result rather than a transport error, so Claude

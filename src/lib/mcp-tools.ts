@@ -155,7 +155,16 @@ function describePack(usage: PackUsage | null | undefined): string {
   }${usage.flags_pending ? `, ${usage.flags_pending} flagged and awaiting your call` : ""}.`;
 }
 
-export async function callTool(name: string, args: Args): Promise<string> {
+/**
+ * @param origin  The public origin of this deployment, used to build the portal
+ *                invite link. Passed in from the route rather than read from an env
+ *                var so it is always the host the request actually arrived on.
+ */
+export async function callTool(
+  name: string,
+  args: Args,
+  origin: string
+): Promise<string> {
   const db = supabaseAdmin();
 
   switch (name) {
@@ -206,7 +215,9 @@ export async function callTool(name: string, args: Args): Promise<string> {
       const inviteEmail = str(args, "invite_email");
       if (inviteEmail) {
         const { data: invited, error: inviteError } =
-          await db.auth.admin.inviteUserByEmail(inviteEmail);
+          await db.auth.admin.inviteUserByEmail(inviteEmail, {
+            redirectTo: `${origin}/portal/auth/callback`,
+          });
         if (inviteError || !invited.user) {
           lines.push(`Portal invite failed: ${inviteError?.message ?? "unknown error"}`);
         } else {
