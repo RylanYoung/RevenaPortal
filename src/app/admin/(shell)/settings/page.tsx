@@ -11,10 +11,12 @@ export default async function SettingsPage() {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = host.startsWith("localhost") ? "http" : "https";
 
-  const mcpUrl = `${proto}://${host}/api/mcp`;
-  // Only presence is checked — the key belongs in the Authorization header,
-  // never in a URL, so it is deliberately not rendered here.
-  const mcpConfigured = Boolean(process.env.MCP_API_KEY);
+  // The key goes in the URL rather than a header: Claude's custom-connector
+  // flow reads a 401 as "this server speaks OAuth" and offers a Sign in button
+  // that leads nowhere. An authorised URL sidesteps that entirely.
+  const mcpKey = process.env.MCP_API_KEY;
+  const mcpConfigured = Boolean(mcpKey);
+  const mcpUrl = `${proto}://${host}/api/mcp?key=${mcpKey ?? "<MCP_API_KEY not set>"}`;
 
   return (
     <>
@@ -46,7 +48,7 @@ export default async function SettingsPage() {
         </p>
 
         <div className="mb-5">
-          <div className="label">Server URL</div>
+          <div className="label">Server URL — includes your key, paste it whole</div>
           <CopyField value={mcpUrl} />
         </div>
 
@@ -54,11 +56,11 @@ export default async function SettingsPage() {
           <div className="text-sm font-semibold text-navy mb-3">How to connect</div>
           <ol className="text-sm text-body space-y-2 list-decimal pl-5">
             <li>In Claude: <strong>Settings → Connectors → Add custom connector</strong></li>
-            <li>Paste the server URL above</li>
+            <li>Paste the URL above, exactly as it is including the <code>?key=</code> part</li>
             <li>
-              Set authentication to <strong>Bearer token</strong> and paste your{" "}
-              <code>MCP_API_KEY</code> (it&apos;s in your Vercel environment
-              variables, and in <code>.env.local</code> for local work)
+              Leave authentication <strong>empty</strong> and don&apos;t click any
+              Sign in button — the key in the URL is the authentication. There is no
+              OAuth server here, so a sign-in prompt means the key is missing or wrong.
             </li>
           </ol>
         </div>

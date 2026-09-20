@@ -17,19 +17,30 @@ export const runtime = "nodejs";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
-function authorized(request: NextRequest): boolean {
-  const expected = process.env.MCP_API_KEY;
-  if (!expected) return false; // Fail closed — unset must not mean open.
-
-  const provided = request.headers
-    .get("authorization")
-    ?.replace(/^Bearer\s+/i, "");
+function matches(provided: string | null, expected: string): boolean {
   if (!provided) return false;
-
   // Hash first so timingSafeEqual always gets equal-length buffers.
   const a = createHash("sha256").update(provided).digest();
   const b = createHash("sha256").update(expected).digest();
   return timingSafeEqual(a, b);
+}
+
+/**
+ * Accepts the key from the URL as well as the Authorization header.
+ *
+ * The query param exists because Claude's custom-connector flow treats a 401
+ * as "this server speaks OAuth" and shows a Sign in button that goes nowhere —
+ * there is no OAuth server here. Putting the key in the connector URL means
+ * requests are authorised from the first byte, so that never triggers.
+ */
+function authorized(request: NextRequest): boolean {
+  const expected = process.env.MCP_API_KEY;
+  if (!expected) return false; // Fail closed — unset must not mean open.
+
+  const fromQuery = request.nextUrl.searchParams.get("key");
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+
+  return matches(fromQuery, expected) || matches(bearer ?? null, expected);
 }
 
 type RpcRequest = {
