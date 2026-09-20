@@ -1,26 +1,248 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   Revena Media design system.
+   Colour, type and shape values are lifted verbatim from
+   revenamedia.com so the portal reads as the same company.
+   Deliberately light-only — the marketing site has no dark mode.
+   ============================================================ */
+@theme {
+  --color-bg: #ffffff; /* page background */
+  --color-panel: #f5f7fc; /* alternate sections, table headers */
+  --color-navy: #0a1440; /* headings, dark surfaces */
+  --color-ink: #101528; /* darkest text */
+  --color-blue: #1414ff; /* PRIMARY electric blue */
+  --color-blue-hover: #2a2aff; /* primary button hover */
+  --color-blue-soft: #4c7dff; /* secondary accent */
+  --color-blue-tint: #eef2ff; /* tinted fills, badges */
+  --color-body: #3f4767; /* body copy */
+  --color-muted: #7a82a3; /* secondary/meta text */
+  --color-line: #e3e7f2; /* borders, dividers */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Status colours. Not on the marketing site — it has no statuses to
+     show — so these are chosen to sit alongside the brand palette at
+     the same weight rather than sampled from it. */
+  --color-ok: #0f9d58;
+  --color-ok-tint: #e7f6ed;
+  --color-warn: #b7791f;
+  --color-warn-tint: #fdf5e4;
+  --color-danger: #d13438;
+  --color-danger-tint: #fdeaea;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-sora), system-ui, sans-serif;
+
+  --radius-card: 18px;
+
+  --shadow-card: 0 10px 30px rgba(10, 20, 64, 0.08);
+  --shadow-card-hover: 0 14px 40px rgba(10, 20, 64, 0.14);
+  --shadow-primary: 0 8px 24px rgba(20, 20, 255, 0.22);
+
+  /* One easing curve everywhere, so motion feels like one system. */
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings carry the navy; body copy stays the softer --body slate,
+   which is what gives the site its contrast rhythm. */
+h1,
+h2,
+h3,
+h4 {
+  color: var(--color-navy);
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+/* ============================================================
+   Motion
+   Every animation is entrance-only and under half a second —
+   long enough to feel considered, short enough that someone
+   checking leads ten times a day never waits on it.
+   ============================================================ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes grow-width {
+  from {
+    width: 0;
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.45s var(--ease-out-soft) both;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.35s ease both;
+  }
+  .animate-pop {
+    animation: pop-in 0.3s var(--ease-out-soft) both;
+  }
+
+  /* Staggers direct children so lists arrive in sequence rather than
+     all at once. Capped at 12 — past that the last items feel laggy. */
+  .stagger > * {
+    animation: fade-up 0.45s var(--ease-out-soft) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0.03s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.06s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.09s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.12s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.15s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.18s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.21s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.24s; }
+  .stagger > *:nth-child(9) { animation-delay: 0.27s; }
+  .stagger > *:nth-child(10) { animation-delay: 0.3s; }
+  .stagger > *:nth-child(n + 11) { animation-delay: 0.33s; }
+}
+
+/* Anyone who has asked their OS to reduce motion gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   Components
+   Sizes run deliberately large: clients read these on a phone,
+   often outdoors, often mid-job.
+   ============================================================ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 14px 28px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 1rem;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      background 0.15s,
+      transform 0.15s var(--ease-out-soft),
+      box-shadow 0.15s;
+    white-space: nowrap;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-blue);
+    color: #fff;
+    box-shadow: var(--shadow-primary);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-blue-hover);
+  }
+  .btn-ghost {
+    color: var(--color-navy);
+    border: 1.5px solid var(--color-line);
+    background: #fff;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-panel);
+    border-color: var(--color-blue-soft);
+  }
+  .btn-sm {
+    padding: 9px 18px;
+    font-size: 0.9rem;
+  }
+  .btn-lg {
+    padding: 18px 36px;
+    font-size: 1.1rem;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Cards that are links get a lift on hover. */
+  .card-hover {
+    transition:
+      box-shadow 0.2s,
+      transform 0.2s var(--ease-out-soft),
+      border-color 0.2s;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+    border-color: var(--color-blue-soft);
+  }
+
+  .field {
+    width: 100%;
+    padding: 13px 16px;
+    border: 1.5px solid var(--color-line);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--color-ink);
+    font-family: inherit;
+    font-size: 1rem;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-blue-soft);
+    box-shadow: 0 0 0 4px var(--color-blue-tint);
+  }
+
+  .label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-navy);
+    margin-bottom: 7px;
+  }
 }
