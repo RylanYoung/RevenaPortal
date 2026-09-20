@@ -100,15 +100,15 @@ on `/admin/setup`, with the bearer token.
 
 Live at **https://revenaportal.vercel.app**
 
-- [x] Supabase project `mhmqdnbslwcrrdogunok` (reused the old 'Business Portal'
-      project — its previous revena-dashboard tables were dropped on request;
-      backup of those 19 rows was taken before the wipe)
+- [x] Supabase project `hucwmwfhzgijkydivvoh` — **Sydney (ap-southeast-2)**. An
+      earlier Mumbai project was used first; moved on 2026-09-21 for latency
 - [x] Schema installed and verified: 5 tables, pack_usage view, flag trigger,
       generated column, RLS on all tables, 6-column grant
 - [x] Vercel env vars set (all six had existed as empty keys)
-- [x] **Vercel functions moved iad1 → bom1** to sit beside the database. They were
-      in Washington DC while the DB is in Mumbai, so every query crossed the
-      planet; measured ~300ms warm / 1.2s cold before the move
+- [x] **Vercel functions in syd1**, co-located with the database. Keep these two
+      regions together: split across continents, pages took ~400ms. After the
+      move, ~150ms — of which ~80-100ms is plain network to Vercel (a static page
+      costs the same), so the DB is no longer the bottleneck
 - [x] Verified live end to end:
       - MCP: tools/list, create_client, list_clients, get_dispute_queue
       - Webhook: tagged lead assigned + attached to pack; duplicate rejected;
