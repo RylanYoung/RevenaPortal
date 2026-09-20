@@ -243,6 +243,46 @@ export async function invitePortalUser(
   return { ok: true };
 }
 
+/**
+ * Sends a fresh login link to someone who already has portal access.
+ *
+ * Uses signInWithOtp rather than inviteUserByEmail, because the invite call
+ * fails once the user exists — which is exactly the case here. `shouldCreateUser`
+ * stays false so this can never quietly create an account from a typo.
+ */
+export async function resendInvite(
+  email: string,
+  clientId: string
+): Promise<Result> {
+  const url = process.env.SUPABASE_URL;
+  const anon = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anon) return { ok: false, error: "Supabase isn't configured." };
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+
+  // A plain anon client — signInWithOtp is an auth call and must not run
+  // through the service-role client.
+  const { createClient: createSupabase } = await import("@supabase/supabase-js");
+  const auth = createSupabase(url, anon, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { error } = await auth.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${proto}://${host}/portal/auth/callback`,
+      shouldCreateUser: false,
+    },
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/admin/clients/${clientId}`);
+  return { ok: true };
+}
+
 /** Revokes portal access. Leaves the auth user intact, just unlinks them. */
 export async function removePortalUser(userId: string, clientId: string) {
   const db = supabaseAdmin();

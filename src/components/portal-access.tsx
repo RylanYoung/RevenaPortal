@@ -1,7 +1,11 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
-import { invitePortalUser, removePortalUser } from "@/app/admin/actions";
+import { useActionState, useState, useTransition } from "react";
+import {
+  invitePortalUser,
+  removePortalUser,
+  resendInvite,
+} from "@/app/admin/actions";
 
 type PortalUser = { id: string; email: string; role: string };
 
@@ -14,6 +18,17 @@ export function PortalAccess({
 }) {
   const [result, formAction, pending] = useActionState(invitePortalUser, null);
   const [removing, startRemove] = useTransition();
+  // Keyed by email so each row reports its own state, not a shared one.
+  const [sent, setSent] = useState<Record<string, string>>({});
+  const [sending, startSend] = useTransition();
+
+  function resend(email: string) {
+    startSend(async () => {
+      const r = await resendInvite(email, clientId);
+      setSent((s) => ({ ...s, [email]: r.ok ? "Sent" : r.error }));
+      if (r.ok) setTimeout(() => setSent((s) => ({ ...s, [email]: "" })), 4000);
+    });
+  }
 
   return (
     <div className="card p-5">
@@ -34,13 +49,31 @@ export function PortalAccess({
                 <div className="text-sm font-medium text-navy">{user.email}</div>
                 <div className="text-xs text-muted">{user.role.replace("_", " ")}</div>
               </div>
-              <button
-                disabled={removing}
-                onClick={() => startRemove(() => removePortalUser(user.id, clientId))}
-                className="text-xs text-muted hover:text-danger transition-colors"
-              >
-                Remove
-              </button>
+              <div className="flex items-center gap-3 shrink-0">
+                {sent[user.email] && (
+                  <span
+                    className={`text-xs font-semibold animate-fade-in ${
+                      sent[user.email] === "Sent" ? "text-ok" : "text-danger"
+                    }`}
+                  >
+                    {sent[user.email]}
+                  </span>
+                )}
+                <button
+                  disabled={sending}
+                  onClick={() => resend(user.email)}
+                  className="btn btn-ghost btn-sm"
+                >
+                  {sending ? "Sending…" : "Resend link"}
+                </button>
+                <button
+                  disabled={removing}
+                  onClick={() => startRemove(() => removePortalUser(user.id, clientId))}
+                  className="text-xs text-muted hover:text-danger transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>
