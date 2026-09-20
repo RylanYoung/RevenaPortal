@@ -1,6 +1,7 @@
 import { currentPortalUser, supabaseServer } from "@/lib/supabase-server";
 import type { Pack, PackUsage } from "@/lib/types";
 import { formatDate } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,14 @@ export default async function AccountPage() {
           <p className="mt-6 text-sm text-muted">
             Something not right? Let us know and we&apos;ll update it.
           </p>
+        </div>
+
+        <div className="card p-6">
+          <h2 className="text-xl mb-2">Appearance</h2>
+          <p className="text-sm text-muted mb-5">
+            Remembered on this device.
+          </p>
+          <ThemeToggle />
         </div>
 
         <div className="card p-6">

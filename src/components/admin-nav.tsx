@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin/unassigned", label: "Unassigned" },
   { href: "/admin/requests", label: "Replacement requests" },
   { href: "/admin/setup", label: "Webhook setup" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export function AdminNav({ counts }: { counts: { unassigned: number; requests: number } }) {

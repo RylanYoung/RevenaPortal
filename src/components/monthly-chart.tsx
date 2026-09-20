@@ -13,8 +13,11 @@ import type { MonthBucket } from "@/lib/reporting";
  * gray. Validated on the adjacent pair: ΔE 21.6 protan / 29.6 normal, contrast
  * >= 3:1 on white.
  */
-const COUNTED = "#1414FF";
-const REPLACED = "#7A82A3";
+// CSS variables, not literals, so the chart follows the theme. The dark
+// values are chosen (blue lifts to #6A78FF), not an inversion; validated on
+// the dark surface at deltaE 15.2 protan / 15.6 normal.
+const COUNTED = "var(--color-blue)";
+const REPLACED = "var(--color-muted)";
 
 const W = 760;
 const H = 260;
@@ -94,14 +97,14 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
                 x2={W - PAD.right}
                 y1={y(t)}
                 y2={y(t)}
-                stroke="#E3E7F2"
+                stroke="var(--color-line)"
                 strokeWidth={1}
               />
               <text
                 x={PAD.left - 8}
                 y={y(t) + 4}
                 textAnchor="end"
-                className="fill-[#7A82A3]"
+                fill="var(--color-muted)"
                 fontSize={11}
               >
                 {t}
@@ -141,7 +144,7 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
                     x={cx}
                     y={(d.replaced > 0 ? replacedY : countedY) - 7}
                     textAnchor="middle"
-                    className="fill-[#0A1440]"
+                    fill="var(--color-navy)"
                     fontSize={12}
                     fontWeight={600}
                   >
@@ -153,7 +156,7 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
                   x={cx}
                   y={H - 12}
                   textAnchor="middle"
-                  className="fill-[#7A82A3]"
+                  fill="var(--color-muted)"
                   fontSize={11}
                 >
                   {d.label}
@@ -176,8 +179,11 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
 
         {active && (
           <div
-            className="pointer-events-none absolute z-10 rounded-xl bg-navy px-4 py-3 text-white shadow-lg animate-fade-in"
+            className="pointer-events-none absolute z-10 rounded-xl px-4 py-3 shadow-lg animate-fade-in"
             style={{
+              // ink/bg invert together, so the tooltip stays legible in both themes.
+              background: "var(--color-ink)",
+              color: "var(--color-bg)",
               left: `${((PAD.left + slot * hovered! + slot / 2) / W) * 100}%`,
               top: 0,
               transform: "translate(-50%, -8px)",

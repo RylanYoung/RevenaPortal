@@ -4,7 +4,8 @@
    Revena Media design system.
    Colour, type and shape values are lifted verbatim from
    revenamedia.com so the portal reads as the same company.
-   Deliberately light-only — the marketing site has no dark mode.
+   Light is the default because it matches the site; a chosen dark
+   theme is defined below and opted into from Settings.
    ============================================================ */
 @theme {
   --color-bg: #ffffff; /* page background */
@@ -41,11 +42,50 @@
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* ============================================================
+   Dark theme.
+   Chosen values, not an inversion — an auto-flip of the light
+   palette turns #1414FF into a vibrating blue on near-black and
+   makes every border shout. The blue is lifted to #6A78FF so it
+   still reads as the brand at a legible contrast on dark.
+   Opt-in only: the light theme stays the default, because it's
+   what matches revenamedia.com.
+   ============================================================ */
+:root[data-theme="dark"] {
+  --color-bg: #131b36; /* card/surface — LIGHTER than the page */
+  --color-panel: #0b1226; /* page background — darker */
+  --color-navy: #eef1fb; /* headings invert to near-white */
+  --color-ink: #ffffff;
+  --color-blue: #6a78ff;
+  --color-blue-hover: #8590ff;
+  --color-blue-soft: #8fa0ff;
+  --color-blue-tint: #1d2650;
+  --color-body: #c3cade;
+  --color-muted: #8892b0;
+  --color-line: #253052;
+
+  --color-ok: #4ade80;
+  --color-ok-tint: #12301f;
+  --color-warn: #fbbf24;
+  --color-warn-tint: #33280c;
+  --color-danger: #f87171;
+  --color-danger-tint: #3a1618;
+
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 14px 40px rgba(0, 0, 0, 0.45);
+  --shadow-primary: 0 8px 24px rgba(106, 120, 255, 0.28);
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-body);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* Only the theme switch animates this; page loads land on their
+     final colours because the attribute is set before first paint. */
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 /* Headings carry the navy; body copy stays the softer --body slate,
@@ -184,7 +224,7 @@ h4 {
   .btn-ghost {
     color: var(--color-navy);
     border: 1.5px solid var(--color-line);
-    background: #fff;
+    background: var(--color-bg);
   }
   .btn-ghost:hover:not(:disabled) {
     background: var(--color-panel);
@@ -200,7 +240,7 @@ h4 {
   }
 
   .card {
-    background: #fff;
+    background: var(--color-bg);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
@@ -224,7 +264,7 @@ h4 {
     padding: 13px 16px;
     border: 1.5px solid var(--color-line);
     border-radius: 14px;
-    background: #fff;
+    background: var(--color-bg);
     color: var(--color-ink);
     font-family: inherit;
     font-size: 1rem;

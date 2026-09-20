@@ -37,7 +37,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
   return (
     <div className="flex min-h-screen bg-panel">
-      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-line bg-white p-5">
+      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-line bg-bg p-5">
         <Link href="/admin" className="mb-8 block">
           <div className="text-xl font-bold text-navy tracking-tight">
             Revena<span className="text-blue">.</span>
@@ -59,7 +59,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
       <div className="flex-1 min-w-0">
         {/* Mobile nav — the sidebar is hidden below md. */}
-        <div className="md:hidden border-b border-line bg-white px-5 py-3">
+        <div className="md:hidden border-b border-line bg-bg px-5 py-3">
           <Link href="/admin" className="text-lg font-bold text-navy">
             Revena<span className="text-blue">.</span>
           </Link>

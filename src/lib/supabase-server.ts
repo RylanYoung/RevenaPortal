@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -46,8 +47,12 @@ export async function supabaseServer() {
  * Returns null when there's no session, or when the user authenticated but has
  * no `portal_users` row — that second case is a real state: someone can hold a
  * valid Supabase session without having been granted portal access yet.
+ *
+ * Wrapped in React's `cache()` so the layout and the page it renders share one
+ * result. Without it every portal page paid for this twice — an auth round-trip
+ * plus a join, doubled — which is pure latency on a cross-region database.
  */
-export async function currentPortalUser() {
+export const currentPortalUser = cache(async () => {
   const db = await supabaseServer();
 
   const {
@@ -56,19 +61,20 @@ export async function currentPortalUser() {
 
   if (!user) return null;
 
+  // One request instead of two: the client row comes back embedded via the
+  // portal_users -> clients foreign key.
   const { data: portalUser } = await db
     .from("portal_users")
-    .select("id, client_id, email, role")
+    .select("id, client_id, email, role, clients(*)")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!portalUser) return { user, portalUser: null, client: null };
 
-  const { data: client } = await db
-    .from("clients")
-    .select("*")
-    .eq("id", portalUser.client_id)
-    .maybeSingle();
+  // PostgREST returns the embedded row as an object for a to-one relationship,
+  // but types it loosely; normalise so callers always get one client or null.
+  const embedded = portalUser.clients as unknown;
+  const client = Array.isArray(embedded) ? (embedded[0] ?? null) : (embedded ?? null);
 
   return { user, portalUser, client };
-}
+});

@@ -33,7 +33,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
 
   return (
     <div className="min-h-screen bg-panel">
-      <header className="bg-white border-b border-line sticky top-0 z-10">
+      <header className="bg-bg border-b border-line sticky top-0 z-10">
         <div className="mx-auto max-w-[1180px] px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-8">
             <Link href="/portal" className="shrink-0">
