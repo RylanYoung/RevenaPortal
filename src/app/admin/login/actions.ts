@@ -22,7 +22,10 @@ export async function login(_prev: string | null, formData: FormData) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    // 90 days. This is a single-operator admin area on a private URL, so the
+    // cost of a longer session is low and being asked to log in monthly for no
+    // reason is a real annoyance. Logging out clears it immediately.
+    maxAge: 60 * 60 * 24 * 90,
   });
 
   // Only allow same-app paths back — an open redirect here would let a
