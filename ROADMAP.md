@@ -60,10 +60,10 @@ In the schema this is enforced, not just conventional:
 - [x] Optional CRM section, collapsed behind "Track this lead"
 - [x] Motion: staggered entrances, hover lifts, reduced-motion respected
 
-### Still to verify (needs a live Supabase)
-- [ ] Log in as one client, confirm another client's leads are unreachable
-- [ ] Confirm a crafted write to `status` / `pack_id` is rejected by the grant
-- [ ] Confirm the flag trigger fires and lands the lead in the admin queue
+### Verified live (see Phase 5)
+- [x] Anon key with no session reads nothing from leads / clients / packs
+- [x] `authenticated` cannot write `status` / `pack_id` / `client_id`
+- [x] Flag trigger fires and lands the lead in the admin queue
 
 ## Phase 3 — reporting ✅ DONE
 
@@ -96,20 +96,35 @@ serverless with no session store. Auth is a single admin-scoped bearer token
 Connect in Claude: Settings → Connectors → Add custom connector → the URL shown
 on `/admin/setup`, with the bearer token.
 
-## Phase 5 — go live (ALL THAT'S LEFT)
+## Phase 5 — go live ✅ DONE
 
-Every feature is built. What remains is connecting it to real infrastructure and
-verifying the things that can only be verified against a live database.
+Live at **https://revenaportal.vercel.app**
 
-- [ ] Create a Supabase project (**its own** — see the warning above)
-- [ ] Run `supabase/schema.sql`
-- [ ] Fill `.env.local`, then the same keys in Vercel
-- [ ] Deploy to Vercel, point the site's `client-portal.html` at `/portal/login`
-- [ ] Set the GHL webhook URL from `/admin/setup` in every qualification automation
-- [ ] **Verify RLS**: log in as one client, confirm another's leads are unreachable
-- [ ] **Verify the grant**: confirm a crafted write to `status`/`pack_id` is rejected
-- [ ] **Verify the trigger**: flag a lead, confirm it lands in `/admin/requests`
-- [ ] Connect the MCP server in Claude and run `list_clients`
+- [x] Supabase project `mhmqdnbslwcrrdogunok` (reused the old 'Business Portal'
+      project — its previous revena-dashboard tables were dropped on request;
+      backup of those 19 rows was taken before the wipe)
+- [x] Schema installed and verified: 5 tables, pack_usage view, flag trigger,
+      generated column, RLS on all tables, 6-column grant
+- [x] Vercel env vars set (all six had existed as empty keys)
+- [x] **Vercel functions moved iad1 → bom1** to sit beside the database. They were
+      in Washington DC while the DB is in Mumbai, so every query crossed the
+      planet; measured ~300ms warm / 1.2s cold before the move
+- [x] Verified live end to end:
+      - MCP: tools/list, create_client, list_clients, get_dispute_queue
+      - Webhook: tagged lead assigned + attached to pack; duplicate rejected;
+        unknown tag went to unassigned; bad secret 401
+      - RLS: anon key with no session reads nothing from leads/clients/packs
+      - Grant: `authenticated` cannot write status/pack_id/client_id/resolution_note,
+        can write crm_notes/flag_reason
+      - Trigger: flag promoted to replacement_requested while still counting;
+        approval flipped counts_against_pack false and credited the pack back
+- [x] Test data removed — database is empty and ready for real clients
+
+### Remaining (needs Rylan)
+- [ ] Paste the webhook URL from /admin/setup into GHL's qualification automations
+- [ ] Point the site's client-portal.html at https://revenaportal.vercel.app/portal/login
+- [ ] Connect the MCP server in Claude (Settings → Connectors → Add custom connector)
+- [ ] Rotate the Supabase PAT and Vercel token used during setup
 
 ## Deliberately out of scope
 
