@@ -84,7 +84,14 @@ export async function proxy(request: NextRequest) {
 
   // These must stay reachable or there's no way to log in — and they render
   // without a database, which makes them viewable before setup is finished.
-  if (pathname === "/admin/login" || pathname === "/portal/login") {
+  // /portal/forgot is public by necessity: someone locked out has no session.
+  // /portal/reset is NOT listed — the callback signs them in first, so it is
+  // correctly behind the guard.
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/portal/login" ||
+    pathname === "/portal/forgot"
+  ) {
     return NextResponse.next();
   }
   if (pathname.startsWith("/portal/auth/")) {

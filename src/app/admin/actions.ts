@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomInt } from "node:crypto";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { ClientStatus, ServiceType } from "@/lib/types";
@@ -184,17 +185,38 @@ export async function assignLead(leadId: string, clientId: string) {
 
 // ---------------------------------------------------------- portal logins
 
+export type InviteResult =
+  | { ok: true; email: string; password: string; existing: boolean }
+  | { ok: false; error: string };
+
+/** A password a human has to read out or type on a phone. */
+function generatePassword(): string {
+  const words = ["solar", "panel", "copper", "ember", "harbour", "ridge", "beacon", "timber", "marlin", "willow"];
+  const pick = () => words[randomInt(words.length)];
+  const w: string[] = [];
+  while (w.length < 2) {
+    const x = pick();
+    if (!w.includes(x)) w.push(x);
+  }
+  return w.join("-") + "-" + randomInt(100, 1000);
+}
+
 /**
- * Grants a client access to the portal.
+ * Creates a client's portal login with a password.
  *
  * Two steps that both have to happen: a Supabase Auth user must exist, and a
  * `portal_users` row must link it to this client. Without the second, they can
  * log in but RLS resolves them to no client and they see nothing.
+ *
+ * The account is created already confirmed and with a password, so there is no
+ * email in the critical path at all — you hand the client their details
+ * directly. Password auth also avoids Supabase's per-address rate limit, which
+ * magic links hit the moment someone taps the button twice.
  */
 export async function invitePortalUser(
-  _prev: Result | null,
+  _prev: InviteResult | null,
   formData: FormData
-): Promise<Result> {
+): Promise<InviteResult> {
   const client_id = str(formData, "client_id");
   const email = str(formData, "email")?.toLowerCase() ?? null;
 
@@ -203,32 +225,35 @@ export async function invitePortalUser(
     return { ok: false, error: "Enter a valid email address." };
   }
 
-  const db = supabaseAdmin();
-
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : "https";
-  const redirectTo = `${proto}://${host}/portal/auth/callback`;
-
-  let userId: string | null = null;
-
-  const { data: invited, error: inviteError } =
-    await db.auth.admin.inviteUserByEmail(email, { redirectTo });
-
-  if (inviteError) {
-    // Most likely they already have an account — from another client, or from
-    // a previous invite. Reuse it rather than failing.
-    const { data: list } = await db.auth.admin.listUsers();
-    const existing = list?.users.find(
-      (u) => u.email?.toLowerCase() === email
-    );
-    if (!existing) return { ok: false, error: inviteError.message };
-    userId = existing.id;
-  } else {
-    userId = invited.user?.id ?? null;
+  const password = str(formData, "password") ?? generatePassword();
+  if (password.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
   }
 
-  if (!userId) return { ok: false, error: "Could not create that login." };
+  const db = supabaseAdmin();
+
+  // Reuse an existing account rather than failing — they may already have a
+  // login from another client, and one person can only belong to one business.
+  const { data: list } = await db.auth.admin.listUsers();
+  const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
+
+  let userId: string;
+
+  if (existing) {
+    const { error } = await db.auth.admin.updateUserById(existing.id, { password });
+    if (error) return { ok: false, error: error.message };
+    userId = existing.id;
+  } else {
+    const { data: created, error } = await db.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // No confirmation step — you vouched for them.
+    });
+    if (error || !created.user) {
+      return { ok: false, error: error?.message ?? "Could not create that login." };
+    }
+    userId = created.user.id;
+  }
 
   const { error } = await db.from("portal_users").upsert({
     id: userId,
@@ -240,17 +265,16 @@ export async function invitePortalUser(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/admin/clients/${client_id}`);
-  return { ok: true };
+  return { ok: true, email, password, existing: Boolean(existing) };
 }
 
 /**
- * Sends a fresh login link to someone who already has portal access.
+ * Emails an existing portal user a password-reset link.
  *
- * Uses signInWithOtp rather than inviteUserByEmail, because the invite call
- * fails once the user exists — which is exactly the case here. `shouldCreateUser`
- * stays false so this can never quietly create an account from a typo.
+ * Under password auth this is the "I'm locked out" path, and it's the only
+ * remaining reason the portal ever emails a client.
  */
-export async function resendInvite(
+export async function sendPasswordReset(
   email: string,
   clientId: string
 ): Promise<Result> {
@@ -262,19 +286,17 @@ export async function resendInvite(
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = host.startsWith("localhost") ? "http" : "https";
 
-  // A plain anon client — signInWithOtp is an auth call and must not run
-  // through the service-role client.
+  // A plain anon client — this is an auth call and must not run through the
+  // service-role client.
   const { createClient: createSupabase } = await import("@supabase/supabase-js");
   const auth = createSupabase(url, anon, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { error } = await auth.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${proto}://${host}/portal/auth/callback`,
-      shouldCreateUser: false,
-    },
+  const { error } = await auth.auth.resetPasswordForEmail(email, {
+    // ?next sends them to the choose-a-password screen after the callback
+    // has exchanged the code for a session.
+    redirectTo: `${proto}://${host}/portal/auth/callback?next=/portal/reset`,
   });
 
   if (error) return { ok: false, error: error.message };

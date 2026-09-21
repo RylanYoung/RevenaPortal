@@ -30,5 +30,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.redirect(new URL("/portal", origin));
+  // Reset and invite links carry ?next=/portal/reset so the user lands on the
+  // choose-a-password screen. Only same-app paths are honoured — an absolute
+  // URL here would be an open redirect off the back of a valid login.
+  const next = searchParams.get("next");
+  const dest = next && next.startsWith("/portal") ? next : "/portal";
+
+  return NextResponse.redirect(new URL(dest, origin));
 }

@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { supabaseAdmin } from "./supabase-admin";
 import type { Client, Lead, PackUsage } from "./types";
 
@@ -47,7 +48,11 @@ export const TOOLS: ToolDef[] = [
         invite_email: {
           type: "string",
           description:
-            "If given, also creates a portal login and emails them a magic-link invite.",
+            "If given, also creates their portal login. Returns the password once.",
+        },
+        password: {
+          type: "string",
+          description: "Password for that login. One is generated if omitted.",
         },
       },
       required: ["business_name"],
@@ -146,13 +151,17 @@ export const TOOLS: ToolDef[] = [
   {
     name: "invite_portal_user",
     description:
-      "Give someone a login to a client's portal, or resend the link if they already have one. Emails them a magic link — no password involved.",
+      "Create a portal login for a client, or reset an existing one. Returns the email and password to pass on — the password is only shown once.",
     inputSchema: {
       type: "object",
       properties: {
         client_id: { type: "string" },
         business_name: { type: "string", description: "Or identify the client by name" },
         email: { type: "string", description: "Who to invite" },
+        password: {
+          type: "string",
+          description: "Their password. One is generated if omitted. Shown once.",
+        },
       },
       required: ["email"],
     },
@@ -274,6 +283,56 @@ async function findClient(args: Args): Promise<
   return { client: matches[0] };
 }
 
+/** A password someone has to read out or type on a phone. */
+function generatePassword(): string {
+  const words = ["solar", "panel", "copper", "ember", "harbour", "ridge", "beacon", "timber", "marlin", "willow"];
+  const w: string[] = [];
+  while (w.length < 2) {
+    const x = words[randomInt(words.length)];
+    if (!w.includes(x)) w.push(x);
+  }
+  return w.join("-") + "-" + randomInt(100, 1000);
+}
+
+/**
+ * Creates or updates a portal login with a password, and links it to a client.
+ * Returns the password so it can be passed on — it is never retrievable later.
+ */
+async function upsertPortalLogin(
+  clientId: string,
+  email: string,
+  password: string
+): Promise<{ ok: true; existing: boolean } | { ok: false; error: string }> {
+  const db = supabaseAdmin();
+
+  const { data: list } = await db.auth.admin.listUsers();
+  const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
+
+  let userId: string;
+  if (existing) {
+    const { error } = await db.auth.admin.updateUserById(existing.id, { password });
+    if (error) return { ok: false, error: error.message };
+    userId = existing.id;
+  } else {
+    const { data: created, error } = await db.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // No confirmation step — the admin vouched for them.
+    });
+    if (error || !created.user) {
+      return { ok: false, error: error?.message ?? "could not create the login" };
+    }
+    userId = created.user.id;
+  }
+
+  const { error } = await db
+    .from("portal_users")
+    .upsert({ id: userId, client_id: clientId, email, role: "client_admin" });
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, existing: Boolean(existing) };
+}
+
 function describePack(usage: PackUsage | null | undefined): string {
   if (!usage) return "No active pack.";
   return `${usage.leads_used} of ${usage.size} used, ${usage.leads_remaining} remaining${
@@ -338,27 +397,15 @@ export async function callTool(
         lines.push("No pack yet — leads will arrive but won't count against one.");
       }
 
-      const inviteEmail = str(args, "invite_email");
+      const inviteEmail = str(args, "invite_email")?.toLowerCase();
       if (inviteEmail) {
-        const { data: invited, error: inviteError } =
-          await db.auth.admin.inviteUserByEmail(inviteEmail, {
-            redirectTo: `${origin}/portal/auth/callback`,
-          });
-        if (inviteError || !invited.user) {
-          lines.push(`Portal invite failed: ${inviteError?.message ?? "unknown error"}`);
-        } else {
-          const { error: linkError } = await db.from("portal_users").upsert({
-            id: invited.user.id,
-            client_id: client.id,
-            email: inviteEmail,
-            role: "client_admin",
-          });
-          lines.push(
-            linkError
-              ? `Invite sent but linking failed: ${linkError.message}`
-              : `Portal invite sent to ${inviteEmail}.`
-          );
-        }
+        const password = str(args, "password") ?? generatePassword();
+        const res = await upsertPortalLogin(client.id, inviteEmail, password);
+        lines.push(
+          res.ok
+            ? `Portal login ready — email: ${inviteEmail}, password: ${password} (this is the only time it's shown).`
+            : `Portal login failed: ${res.error}`
+        );
       }
 
       if (!str(args, "ghl_tag_reference")) {
@@ -578,52 +625,17 @@ export async function callTool(
       if ("error" in found) return found.error;
       const client = found.client;
 
-      const redirectTo = `${origin}/portal/auth/callback`;
+      const password = str(args, "password") ?? generatePassword();
+      const res = await upsertPortalLogin(client.id, email, password);
+      if (!res.ok) return `Could not set that login up: ${res.error}`;
 
-      // Already has a login? Then this is a resend, and inviteUserByEmail
-      // would fail — signInWithOtp is the call that works for existing users.
-      const { data: list } = await db.auth.admin.listUsers();
-      const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
-
-      if (existing) {
-        await db.from("portal_users").upsert({
-          id: existing.id,
-          client_id: client.id,
-          email,
-          role: "client_admin",
-        });
-
-        const url = process.env.SUPABASE_URL;
-        const anon = process.env.SUPABASE_ANON_KEY;
-        if (!url || !anon) return "Supabase anon key isn't configured, so the link can't be sent.";
-
-        const { createClient: createSupabase } = await import("@supabase/supabase-js");
-        const auth = createSupabase(url, anon, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { error } = await auth.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
-        });
-        if (error) return `Linked to ${client.business_name}, but the email failed: ${error.message}`;
-        return `${email} already had a login — linked to ${client.business_name} and sent a fresh link.`;
-      }
-
-      const { data: invited, error: inviteError } =
-        await db.auth.admin.inviteUserByEmail(email, { redirectTo });
-      if (inviteError || !invited.user) {
-        return `Invite failed: ${inviteError?.message ?? "unknown error"}`;
-      }
-
-      const { error } = await db.from("portal_users").upsert({
-        id: invited.user.id,
-        client_id: client.id,
-        email,
-        role: "client_admin",
-      });
-      if (error) return `Invite sent but linking failed: ${error.message}`;
-
-      return `Invited ${email} to ${client.business_name}'s portal.`;
+      return [
+        res.existing
+          ? `${email} already had a login — it's now linked to ${client.business_name} with a new password.`
+          : `Created a portal login for ${client.business_name}.`,
+        `Send them: ${origin}/portal/login — email ${email}, password ${password}`,
+        `That password won't be shown again. If it's lost, set a new one rather than looking it up.`,
+      ].join("\n");
     }
 
     // ---------------------------------------------------------------

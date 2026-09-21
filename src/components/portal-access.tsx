@@ -4,8 +4,9 @@ import { useActionState, useState, useTransition } from "react";
 import {
   invitePortalUser,
   removePortalUser,
-  resendInvite,
+  sendPasswordReset,
 } from "@/app/admin/actions";
+import { CopyField } from "./copy-field";
 
 type PortalUser = { id: string; email: string; role: string };
 
@@ -21,10 +22,11 @@ export function PortalAccess({
   // Keyed by email so each row reports its own state, not a shared one.
   const [sent, setSent] = useState<Record<string, string>>({});
   const [sending, startSend] = useTransition();
+  const [showCustom, setShowCustom] = useState(false);
 
-  function resend(email: string) {
+  function reset(email: string) {
     startSend(async () => {
-      const r = await resendInvite(email, clientId);
+      const r = await sendPasswordReset(email, clientId);
       setSent((s) => ({ ...s, [email]: r.ok ? "Sent" : r.error }));
       if (r.ok) setTimeout(() => setSent((s) => ({ ...s, [email]: "" })), 4000);
     });
@@ -34,8 +36,8 @@ export function PortalAccess({
     <div className="card p-5">
       <h2 className="font-semibold text-navy mb-1">Portal access</h2>
       <p className="text-sm text-muted mb-4">
-        Who can log in and see this client&apos;s leads. They sign in with a magic
-        link — no passwords.
+        Who can log in and see this client&apos;s leads. They sign in with their
+        email and a password.
       </p>
 
       {users.length > 0 && (
@@ -43,7 +45,7 @@ export function PortalAccess({
           {users.map((user) => (
             <div
               key={user.id}
-              className="flex items-center justify-between gap-4 border-b border-line last:border-0 py-2"
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-line last:border-0 py-2"
             >
               <div>
                 <div className="text-sm font-medium text-navy">{user.email}</div>
@@ -61,10 +63,10 @@ export function PortalAccess({
                 )}
                 <button
                   disabled={sending}
-                  onClick={() => resend(user.email)}
+                  onClick={() => reset(user.email)}
                   className="btn btn-ghost btn-sm"
                 >
-                  {sending ? "Sending…" : "Resend link"}
+                  {sending ? "Sending…" : "Email password reset"}
                 </button>
                 <button
                   disabled={removing}
@@ -79,31 +81,70 @@ export function PortalAccess({
         </div>
       )}
 
-      <form action={formAction} className="flex flex-wrap items-end gap-3">
-        <input type="hidden" name="client_id" value={clientId} />
-        <div className="flex-1 min-w-[220px]">
-          <label className="label" htmlFor="portal-email">
-            Invite by email
-          </label>
-          <input
-            id="portal-email"
-            name="email"
-            type="email"
-            required
-            className="field"
-            placeholder="owner@theirbusiness.com.au"
+      {/* ---- the password, shown once, right after it's created ---- */}
+      {result?.ok && (
+        <div className="mb-5 rounded-xl bg-ok-tint border border-line p-5 animate-fade-up">
+          <div className="text-sm font-semibold text-navy mb-1">
+            {result.existing ? "Password reset" : "Login created"} — send these to
+            them
+          </div>
+          <p className="text-xs text-muted mb-3">
+            This is the only time the password is shown. If you lose it, set a new
+            one — you can&apos;t look it up.
+          </p>
+          <CopyField
+            multiline
+            value={`Portal: ${typeof window !== "undefined" ? window.location.origin : ""}/portal/login\nEmail: ${result.email}\nPassword: ${result.password}`}
           />
         </div>
-        <button type="submit" disabled={pending} className="btn btn-primary btn-sm">
-          {pending ? "Inviting…" : "Send invite"}
-        </button>
+      )}
+
+      <form action={formAction} className="grid gap-3">
+        <input type="hidden" name="client_id" value={clientId} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[220px]">
+            <label className="label" htmlFor="portal-email">
+              Create a login
+            </label>
+            <input
+              id="portal-email"
+              name="email"
+              type="email"
+              required
+              className="field"
+              placeholder="owner@theirbusiness.com.au"
+            />
+          </div>
+          <button type="submit" disabled={pending} className="btn btn-primary btn-sm">
+            {pending ? "Creating…" : "Create login"}
+          </button>
+        </div>
+
+        {showCustom ? (
+          <div>
+            <label className="label" htmlFor="portal-password">
+              Password
+            </label>
+            <input
+              id="portal-password"
+              name="password"
+              type="text"
+              minLength={8}
+              className="field"
+              placeholder="At least 8 characters"
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowCustom(true)}
+            className="text-xs text-muted hover:text-navy text-left w-fit"
+          >
+            Set the password myself (otherwise one is generated)
+          </button>
+        )}
       </form>
 
-      {result?.ok && (
-        <p className="mt-3 text-sm text-ok font-semibold animate-fade-in">
-          Invite sent. They can also log in any time at /portal/login.
-        </p>
-      )}
       {result && !result.ok && (
         <p className="mt-3 text-sm text-danger">{result.error}</p>
       )}
