@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { supabaseAdmin } from "./supabase-admin";
 import type { Client, Lead, PackUsage } from "./types";
 
@@ -48,11 +47,7 @@ export const TOOLS: ToolDef[] = [
         invite_email: {
           type: "string",
           description:
-            "If given, also creates their portal login. Returns the password once.",
-        },
-        password: {
-          type: "string",
-          description: "Password for that login. One is generated if omitted.",
+            "If given, also emails them a link to set up their portal login.",
         },
       },
       required: ["business_name"],
@@ -151,17 +146,13 @@ export const TOOLS: ToolDef[] = [
   {
     name: "invite_portal_user",
     description:
-      "Create a portal login for a client, or reset an existing one. Returns the email and password to pass on — the password is only shown once.",
+      "Email someone a link to set up their portal login for a client. They choose their own password. If they already have a login, sends a reset link instead.",
     inputSchema: {
       type: "object",
       properties: {
         client_id: { type: "string" },
         business_name: { type: "string", description: "Or identify the client by name" },
         email: { type: "string", description: "Who to invite" },
-        password: {
-          type: "string",
-          description: "Their password. One is generated if omitted. Shown once.",
-        },
       },
       required: ["email"],
     },
@@ -283,46 +274,47 @@ async function findClient(args: Args): Promise<
   return { client: matches[0] };
 }
 
-/** A password someone has to read out or type on a phone. */
-function generatePassword(): string {
-  const words = ["solar", "panel", "copper", "ember", "harbour", "ridge", "beacon", "timber", "marlin", "willow"];
-  const w: string[] = [];
-  while (w.length < 2) {
-    const x = words[randomInt(words.length)];
-    if (!w.includes(x)) w.push(x);
-  }
-  return w.join("-") + "-" + randomInt(100, 1000);
-}
-
 /**
- * Creates or updates a portal login with a password, and links it to a client.
- * Returns the password so it can be passed on — it is never retrievable later.
+ * Emails someone a link to set up their own portal login, and links them to a
+ * client. The client chooses their own password — nothing is generated here.
+ *
+ * An address that already has an account gets a password-reset link instead,
+ * because inviteUserByEmail fails once the user exists.
  */
-async function upsertPortalLogin(
+async function sendPortalSetup(
   clientId: string,
   email: string,
-  password: string
+  origin: string
 ): Promise<{ ok: true; existing: boolean } | { ok: false; error: string }> {
   const db = supabaseAdmin();
+  const redirectTo = `${origin}/portal/auth/callback?next=/portal/reset`;
 
   const { data: list } = await db.auth.admin.listUsers();
   const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
 
   let userId: string;
+
   if (existing) {
-    const { error } = await db.auth.admin.updateUserById(existing.id, { password });
-    if (error) return { ok: false, error: error.message };
     userId = existing.id;
-  } else {
-    const { data: created, error } = await db.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true, // No confirmation step — the admin vouched for them.
+
+    const url = process.env.SUPABASE_URL;
+    const anon = process.env.SUPABASE_ANON_KEY;
+    if (!url || !anon) return { ok: false, error: "Supabase anon key isn't configured." };
+
+    const { createClient: createSupabase } = await import("@supabase/supabase-js");
+    const auth = createSupabase(url, anon, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-    if (error || !created.user) {
-      return { ok: false, error: error?.message ?? "could not create the login" };
+    const { error } = await auth.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { data: invited, error } = await db.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+    });
+    if (error || !invited.user) {
+      return { ok: false, error: error?.message ?? "could not send the invite" };
     }
-    userId = created.user.id;
+    userId = invited.user.id;
   }
 
   const { error } = await db
@@ -399,12 +391,11 @@ export async function callTool(
 
       const inviteEmail = str(args, "invite_email")?.toLowerCase();
       if (inviteEmail) {
-        const password = str(args, "password") ?? generatePassword();
-        const res = await upsertPortalLogin(client.id, inviteEmail, password);
+        const res = await sendPortalSetup(client.id, inviteEmail, origin);
         lines.push(
           res.ok
-            ? `Portal login ready — email: ${inviteEmail}, password: ${password} (this is the only time it's shown).`
-            : `Portal login failed: ${res.error}`
+            ? `Emailed ${inviteEmail} a link to set up their portal login — they choose their own password.`
+            : `Portal setup email failed: ${res.error}`
         );
       }
 
@@ -625,17 +616,12 @@ export async function callTool(
       if ("error" in found) return found.error;
       const client = found.client;
 
-      const password = str(args, "password") ?? generatePassword();
-      const res = await upsertPortalLogin(client.id, email, password);
+      const res = await sendPortalSetup(client.id, email, origin);
       if (!res.ok) return `Could not set that login up: ${res.error}`;
 
-      return [
-        res.existing
-          ? `${email} already had a login — it's now linked to ${client.business_name} with a new password.`
-          : `Created a portal login for ${client.business_name}.`,
-        `Send them: ${origin}/portal/login — email ${email}, password ${password}`,
-        `That password won't be shown again. If it's lost, set a new one rather than looking it up.`,
-      ].join("\n");
+      return res.existing
+        ? `${email} already had a login — linked to ${client.business_name} and emailed a fresh link to set a new password.`
+        : `Emailed ${email} a link to set up their login for ${client.business_name}. They choose their own password — nothing to pass on.`;
     }
 
     // ---------------------------------------------------------------

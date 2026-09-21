@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomInt } from "node:crypto";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { ClientStatus, ServiceType } from "@/lib/types";
@@ -186,32 +185,19 @@ export async function assignLead(leadId: string, clientId: string) {
 // ---------------------------------------------------------- portal logins
 
 export type InviteResult =
-  | { ok: true; email: string; password: string; existing: boolean }
+  | { ok: true; email: string; existing: boolean }
   | { ok: false; error: string };
 
-/** A password a human has to read out or type on a phone. */
-function generatePassword(): string {
-  const words = ["solar", "panel", "copper", "ember", "harbour", "ridge", "beacon", "timber", "marlin", "willow"];
-  const pick = () => words[randomInt(words.length)];
-  const w: string[] = [];
-  while (w.length < 2) {
-    const x = pick();
-    if (!w.includes(x)) w.push(x);
-  }
-  return w.join("-") + "-" + randomInt(100, 1000);
-}
-
 /**
- * Creates a client's portal login with a password.
+ * Emails a client a link to set up their own portal login.
  *
- * Two steps that both have to happen: a Supabase Auth user must exist, and a
- * `portal_users` row must link it to this client. Without the second, they can
- * log in but RLS resolves them to no client and they see nothing.
+ * They pick their own password — nothing is generated and read back to you to
+ * relay. Two things both have to happen: a Supabase Auth user must exist, and
+ * a `portal_users` row must link it to this client. Without the second they can
+ * log in but RLS resolves them to no client and they see an empty portal.
  *
- * The account is created already confirmed and with a password, so there is no
- * email in the critical path at all — you hand the client their details
- * directly. Password auth also avoids Supabase's per-address rate limit, which
- * magic links hit the moment someone taps the button twice.
+ * An address that already has an account gets a password-reset link instead,
+ * because the invite call fails once the user exists.
  */
 export async function invitePortalUser(
   _prev: InviteResult | null,
@@ -225,34 +211,32 @@ export async function invitePortalUser(
     return { ok: false, error: "Enter a valid email address." };
   }
 
-  const password = str(formData, "password") ?? generatePassword();
-  if (password.length < 8) {
-    return { ok: false, error: "Password must be at least 8 characters." };
-  }
-
   const db = supabaseAdmin();
 
-  // Reuse an existing account rather than failing — they may already have a
-  // login from another client, and one person can only belong to one business.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  // ?next drops them on the choose-a-password screen once the callback has
+  // exchanged the code for a session.
+  const redirectTo = `${proto}://${host}/portal/auth/callback?next=/portal/reset`;
+
   const { data: list } = await db.auth.admin.listUsers();
   const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
 
   let userId: string;
 
   if (existing) {
-    const { error } = await db.auth.admin.updateUserById(existing.id, { password });
-    if (error) return { ok: false, error: error.message };
     userId = existing.id;
+    const resent = await sendPasswordReset(email, client_id);
+    if (!resent.ok) return { ok: false, error: resent.error };
   } else {
-    const { data: created, error } = await db.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true, // No confirmation step — you vouched for them.
+    const { data: invited, error } = await db.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
     });
-    if (error || !created.user) {
-      return { ok: false, error: error?.message ?? "Could not create that login." };
+    if (error || !invited.user) {
+      return { ok: false, error: error?.message ?? "Could not send that invite." };
     }
-    userId = created.user.id;
+    userId = invited.user.id;
   }
 
   const { error } = await db.from("portal_users").upsert({
@@ -265,7 +249,7 @@ export async function invitePortalUser(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/admin/clients/${client_id}`);
-  return { ok: true, email, password, existing: Boolean(existing) };
+  return { ok: true, email, existing: Boolean(existing) };
 }
 
 /**
