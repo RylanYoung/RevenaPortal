@@ -82,6 +82,8 @@ export type PackUsage = {
   started_at: string;
   ended_at: string | null;
   status: PackStatus;
+  adjustment: number;
+  leads_delivered: number;
   leads_used: number;
   leads_remaining: number;
   leads_replaced: number;

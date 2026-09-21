@@ -51,8 +51,17 @@ create table if not exists packs (
   status text not null default 'active'
     check (status in ('active', 'completed', 'cancelled')),
   notes text,
+  -- Manual correction to the usage count, added to the leads actually
+  -- delivered through the system. Covers leads sent before the portal
+  -- existed, delivered by another route, or a count that needs fixing by
+  -- hand. Kept separate from the lead count rather than overwriting it, so
+  -- the real delivered figure is never lost and the adjustment is visible
+  -- as an adjustment.
+  adjustment integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table packs add column if not exists adjustment integer not null default 0;
 
 -- A client can only have one pack taking deliveries at a time — this is what
 -- makes "which pack does an incoming lead belong to?" a question with one answer.
@@ -149,7 +158,11 @@ create index if not exists portal_users_client_idx on portal_users (client_id);
 -- ============================================================
 -- Pack usage view — one row per pack with live usage numbers.
 -- ============================================================
-create or replace view pack_usage as
+-- Dropped rather than replaced: the column list changed, and CREATE OR REPLACE
+-- VIEW cannot add columns.
+drop view if exists pack_usage;
+
+create view pack_usage as
 select
   p.id                as pack_id,
   p.client_id,
@@ -158,9 +171,16 @@ select
   p.started_at,
   p.ended_at,
   p.status,
-  count(l.id) filter (where l.counts_against_pack)       as leads_used,
-  greatest(p.size - count(l.id) filter (where l.counts_against_pack), 0) as leads_remaining,
-  count(l.id) filter (where l.status = 'replaced')        as leads_replaced,
+  p.adjustment,
+  -- What actually arrived through the system, before any correction.
+  count(l.id) filter (where l.counts_against_pack)        as leads_delivered,
+  -- What the client is shown. Never negative, however the adjustment is set.
+  greatest(count(l.id) filter (where l.counts_against_pack) + p.adjustment, 0)
+                                                          as leads_used,
+  greatest(
+    p.size - (count(l.id) filter (where l.counts_against_pack) + p.adjustment), 0
+  )                                                       as leads_remaining,
+  count(l.id) filter (where l.status = 'replaced')         as leads_replaced,
   count(l.id) filter (where l.status = 'replacement_requested') as flags_pending
 from packs p
 left join leads l on l.pack_id = p.id

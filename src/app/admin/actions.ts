@@ -134,6 +134,45 @@ export async function createPack(
   return { ok: true };
 }
 
+/**
+ * Corrects how many leads a pack shows as used.
+ *
+ * Takes the figure you want displayed and stores the difference from what was
+ * actually delivered, rather than overwriting the count. The real delivered
+ * number stays intact and the correction stays visible as a correction — so a
+ * pack that reads "12 used" can always be explained.
+ */
+export async function setPackUsage(
+  packId: string,
+  clientId: string,
+  used: number
+): Promise<Result> {
+  if (!Number.isFinite(used) || used < 0) {
+    return { ok: false, error: "Enter a number of 0 or more." };
+  }
+
+  const db = supabaseAdmin();
+
+  const { data: usage } = await db
+    .from("pack_usage")
+    .select("leads_delivered")
+    .eq("pack_id", packId)
+    .maybeSingle();
+
+  if (!usage) return { ok: false, error: "Couldn't find that pack." };
+
+  const { error } = await db
+    .from("packs")
+    .update({ adjustment: Math.round(used) - usage.leads_delivered })
+    .eq("id", packId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/admin/clients/${clientId}`);
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
 // ------------------------------------------------------------------ leads
 
 /**

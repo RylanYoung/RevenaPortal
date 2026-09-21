@@ -214,6 +214,20 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "set_pack_usage",
+    description:
+      "Correct how many leads a client's current pack shows as used — for leads delivered before the portal existed, sent another way, or a count that's simply wrong. The real delivered figure is kept and the difference is recorded as an adjustment.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        business_name: { type: "string", description: "Or identify the client by name" },
+        used: { type: "number", description: "The number of leads used you want shown" },
+      },
+      required: ["used"],
+    },
+  },
+  {
     name: "assign_lead",
     description:
       "Place an unassigned lead with a client, or move a mis-routed one. Attaches it to that client's active pack so it starts counting.",
@@ -744,6 +758,37 @@ export async function callTool(
             } — ${l.status}${l.flag_reason ? ` [${l.flag_reason}]` : ""} — id ${l.id}`
         )
         .join("\n");
+    }
+
+    // ---------------------------------------------------------------
+    case "set_pack_usage": {
+      const used = num(args, "used");
+      if (used === null || used < 0) return "used must be a number of 0 or more.";
+
+      const found = await findClient(args);
+      if ("error" in found) return found.error;
+      const client = found.client;
+
+      const { data: usage } = await db
+        .from("pack_usage")
+        .select("pack_id, size, leads_delivered")
+        .eq("client_id", client.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!usage) return `${client.business_name} has no active pack to adjust.`;
+
+      const adjustment = Math.round(used) - usage.leads_delivered;
+      const { error } = await db
+        .from("packs")
+        .update({ adjustment })
+        .eq("id", usage.pack_id);
+      if (error) return `Could not adjust: ${error.message}`;
+
+      return [
+        `${client.business_name}'s pack now reads ${Math.round(used)} of ${usage.size} used.`,
+        `${usage.leads_delivered} came through the system; the other ${adjustment >= 0 ? adjustment : `(${adjustment})`} is recorded as a manual adjustment.`,
+      ].join(" ");
     }
 
     // ---------------------------------------------------------------

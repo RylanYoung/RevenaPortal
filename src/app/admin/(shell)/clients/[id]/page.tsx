@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Client, Lead, Pack, PackUsage } from "@/lib/types";
 import { LeadsTable } from "@/components/leads-table";
-import { ClientStatusControl, NewPackForm } from "@/components/client-controls";
+import { ClientStatusControl, NewPackForm, PackUsageEditor } from "@/components/client-controls";
 import { PortalAccess } from "@/components/portal-access";
 import {
   PageHeader,
@@ -143,7 +143,19 @@ export default async function ClientDetailPage({ params }: PageProps<"/admin/cli
             <PackBar used={activeUsage.leads_used} size={activeUsage.size} />
             <div className="mt-3 text-xs text-muted">
               Started {formatDate(activePack.started_at)} · {formatMoney(Number(activePack.price))} paid
+              {activeUsage.adjustment !== 0 && (
+                <> · <span className="text-warn font-semibold">
+                  {activeUsage.adjustment > 0 ? "+" : ""}{activeUsage.adjustment} manual adjustment
+                </span></>
+              )}
             </div>
+            <PackUsageEditor
+              packId={activePack.id}
+              clientId={typedClient.id}
+              used={activeUsage.leads_used}
+              delivered={activeUsage.leads_delivered}
+              size={activeUsage.size}
+            />
           </div>
           <StatCard label="Replaced" value={activeUsage.leads_replaced} hint="Not counted" />
           <StatCard

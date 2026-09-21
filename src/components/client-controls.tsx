@@ -1,8 +1,95 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { createPack, setClientStatus } from "@/app/admin/actions";
+import { createPack, setClientStatus, setPackUsage } from "@/app/admin/actions";
 import { CLIENT_STATUSES, type ClientStatus } from "@/lib/types";
+
+/**
+ * Lets you correct the used count on a pack — for leads delivered before the
+ * portal existed, or sent by another route, or a figure that's simply wrong.
+ */
+export function PackUsageEditor({
+  packId,
+  clientId,
+  used,
+  delivered,
+  size,
+}: {
+  packId: string;
+  clientId: string;
+  used: number;
+  delivered: number;
+  size: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(String(used));
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => {
+          setValue(String(used));
+          setOpen(true);
+        }}
+        className="text-xs text-muted hover:text-navy transition-colors"
+      >
+        Adjust count
+      </button>
+    );
+  }
+
+  function save() {
+    const n = Number(value);
+    start(async () => {
+      const r = await setPackUsage(packId, clientId, n);
+      if (r.ok) {
+        setOpen(false);
+        setError(null);
+      } else {
+        setError(r.error);
+      }
+    });
+  }
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <label className="label" htmlFor={`used-${packId}`}>
+        Leads used
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id={`used-${packId}`}
+          type="number"
+          min={0}
+          max={size * 10}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="field w-28"
+          disabled={pending}
+        />
+        <button onClick={save} disabled={pending} className="btn btn-primary btn-sm">
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button
+          onClick={() => {
+            setOpen(false);
+            setError(null);
+          }}
+          className="text-xs text-muted hover:text-navy"
+        >
+          Cancel
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {delivered} delivered through the system. Setting a different number keeps
+        that figure and records the difference as a manual adjustment.
+      </p>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
 
 export function ClientStatusControl({
   clientId,
