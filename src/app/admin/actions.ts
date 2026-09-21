@@ -221,6 +221,46 @@ export async function assignLead(leadId: string, clientId: string) {
   revalidatePath("/admin");
 }
 
+// ----------------------------------------------------------- notifications
+
+/**
+ * Sends a message to one client, or to everyone.
+ *
+ * Stored once with a null client_id for an announcement rather than copied per
+ * recipient — a typo in something sent to everyone should be one edit, not
+ * one per client.
+ */
+export async function sendNotification(
+  _prev: Result | null,
+  formData: FormData
+): Promise<Result> {
+  const title = str(formData, "title");
+  const body = str(formData, "body");
+  // "all" is the sentinel for everyone; anything else is a client id.
+  const target = str(formData, "client_id");
+
+  if (!title) return { ok: false, error: "Give it a title." };
+  if (!body) return { ok: false, error: "Write a message." };
+
+  const db = supabaseAdmin();
+  const { error } = await db.from("notifications").insert({
+    client_id: target && target !== "all" ? target : null,
+    title,
+    body,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/notifications");
+  return { ok: true };
+}
+
+export async function deleteNotification(id: string) {
+  const db = supabaseAdmin();
+  await db.from("notifications").delete().eq("id", id);
+  revalidatePath("/admin/notifications");
+}
+
 // ---------------------------------------------------------- portal logins
 
 export type InviteResult =

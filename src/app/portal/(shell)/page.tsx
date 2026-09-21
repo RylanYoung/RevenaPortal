@@ -3,6 +3,7 @@ import { currentPortalUser, supabaseServer } from "@/lib/supabase-server";
 import type { Lead, PackUsage } from "@/lib/types";
 import { EmptyState, formatDate, formatDateTime } from "@/components/ui";
 import { LeadStatusBadge } from "@/components/ui";
+import { PortalNotifications } from "@/components/portal-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,11 @@ export default async function PortalDashboard() {
 
   const db = await supabaseServer();
 
-  const [packRes, recentRes, monthRes, flaggedRes] = await Promise.all([
+  const {
+    data: { user },
+  } = await db.auth.getUser();
+
+  const [packRes, recentRes, monthRes, flaggedRes, notifRes, readsRes] = await Promise.all([
     db.from("pack_usage").select("*").eq("status", "active").maybeSingle(),
     db.from("leads").select("*").order("received_at", { ascending: false }).limit(5),
     db
@@ -28,7 +33,20 @@ export default async function PortalDashboard() {
       .from("leads")
       .select("id", { count: "exact", head: true })
       .eq("status", "replacement_requested"),
+    // RLS already limits these to this client plus anything sent to everyone.
+    db.from("notifications").select("*").order("created_at", { ascending: false }).limit(20),
+    db.from("notification_reads").select("notification_id").eq("user_id", user?.id ?? ""),
   ]);
+
+  const readIds = new Set(
+    ((readsRes.data ?? []) as { notification_id: string }[]).map((r) => r.notification_id)
+  );
+  const unread = ((notifRes.data ?? []) as {
+    id: string;
+    title: string;
+    body: string;
+    created_at: string;
+  }[]).filter((n) => !readIds.has(n.id));
 
   const pack = packRes.data as PackUsage | null;
   const recent = (recentRes.data ?? []) as Lead[];
@@ -46,6 +64,8 @@ export default async function PortalDashboard() {
         </h1>
         <p className="text-lg text-muted mt-1">Here&apos;s where your leads are at.</p>
       </div>
+
+      <PortalNotifications items={unread} />
 
       {/* ---- the one number that matters ---- */}
       {pack ? (

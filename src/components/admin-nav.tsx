@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/admin/leads", label: "Leads" },
   { href: "/admin/unassigned", label: "Unassigned" },
   { href: "/admin/requests", label: "Replacement requests" },
+  { href: "/admin/notifications", label: "Messages" },
   { href: "/admin/setup", label: "Webhook setup" },
   { href: "/admin/settings", label: "Settings" },
 ];

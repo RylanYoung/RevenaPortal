@@ -162,6 +162,30 @@ create table if not exists portal_users (
 
 create index if not exists portal_users_client_idx on portal_users (client_id);
 
+-- ---------- notifications ----------
+-- Messages Rylan sends to clients, shown inside the portal.
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  -- null means every client. A row per recipient would mean editing a typo in
+  -- an announcement touching every copy of it.
+  client_id uuid references clients(id) on delete cascade,
+  title text not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_client_idx
+  on notifications (client_id, created_at desc);
+
+-- Read state is per USER, not per client: a business with two logins should
+-- not have one person's dismissal hide the message from the other.
+create table if not exists notification_reads (
+  notification_id uuid not null references notifications(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  read_at timestamptz not null default now(),
+  primary key (notification_id, user_id)
+);
+
 -- ============================================================
 -- Pack usage view — one row per pack with live usage numbers.
 -- ============================================================
@@ -248,6 +272,29 @@ create policy lead_events_select_own on lead_events
     select 1 from leads where leads.id = lead_events.lead_id
       and leads.client_id = current_client_id()
   ));
+
+alter table notifications      enable row level security;
+alter table notification_reads enable row level security;
+
+-- A client sees messages addressed to them, plus anything sent to everyone.
+drop policy if exists notifications_select_own on notifications;
+create policy notifications_select_own on notifications
+  for select to authenticated
+  using (client_id is null or client_id = current_client_id());
+
+-- Read state is the one thing a client writes here, and only their own.
+drop policy if exists notification_reads_select_self on notification_reads;
+create policy notification_reads_select_self on notification_reads
+  for select to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists notification_reads_insert_self on notification_reads;
+create policy notification_reads_insert_self on notification_reads
+  for insert to authenticated
+  with check (user_id = auth.uid());
+
+grant select on notifications to authenticated;
+grant select, insert on notification_reads to authenticated;
 
 drop policy if exists portal_users_select_self on portal_users;
 create policy portal_users_select_self on portal_users
