@@ -112,7 +112,6 @@ export const ONBOARDING: Section[] = [
         key: "follow_up_contact",
         label: "Who on your team follows up leads?",
         type: "text",
-        required: true,
         editable: true,
         help: "Name and number.",
         placeholder: "e.g. Dave Mitchell — 0400 123 456",
