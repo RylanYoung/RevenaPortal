@@ -1,14 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { login, type LoginState } from "./actions";
 
 export default function PortalLoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
     login,
     null
   );
+  // A dead setup link redirects here with ?error=... — without showing it, the
+  // user just sees a login form and has no idea why their link didn't work.
+  const linkError = useSearchParams().get("error");
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-panel px-6 py-12">
@@ -21,6 +33,11 @@ export default function PortalLoginPage() {
         </div>
 
         <div className="card p-8">
+          {linkError && (
+            <p className="mb-5 rounded-xl bg-warn-tint text-warn px-4 py-3 text-sm animate-fade-in">
+              {linkError}
+            </p>
+          )}
           <form action={formAction}>
             <h1 className="text-2xl mb-6">Log in</h1>
 
