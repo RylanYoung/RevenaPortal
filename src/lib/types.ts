@@ -58,6 +58,8 @@ export type Client = {
   status: ClientStatus;
   ghl_tag_reference: string | null;
   notes: string | null;
+  onboarding: Record<string, unknown> | null;
+  onboarding_completed_at: string | null;
   created_at: string;
   updated_at: string;
 };

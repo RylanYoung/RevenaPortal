@@ -162,6 +162,13 @@ create table if not exists portal_users (
 
 create index if not exists portal_users_client_idx on portal_users (client_id);
 
+-- ---------- onboarding ----------
+-- Answers to the form a client completes on first login. Stored as JSON so
+-- questions can be added or reworded later without a migration, and so old
+-- answers survive a change to the question set.
+alter table clients add column if not exists onboarding jsonb;
+alter table clients add column if not exists onboarding_completed_at timestamptz;
+
 -- ---------- notifications ----------
 -- Messages Rylan sends to clients, shown inside the portal.
 create table if not exists notifications (
@@ -272,6 +279,24 @@ create policy lead_events_select_own on lead_events
     select 1 from leads where leads.id = lead_events.lead_id
       and leads.client_id = current_client_id()
   ));
+
+-- A client fills in their own onboarding, so they need UPDATE on their row.
+-- WHICH columns is fenced by the grant below, not by this policy.
+drop policy if exists clients_update_own on clients;
+create policy clients_update_own on clients
+  for update to authenticated
+  using (id = current_client_id())
+  with check (id = current_client_id());
+
+-- The critical exclusion here is `ghl_tag_reference`. A client who could
+-- write their own routing tag could point another client's leads at
+-- themselves. `status` and `notes` are withheld for the same reason the lead
+-- grant withholds `status`: they are yours to set, not theirs.
+revoke update on clients from authenticated;
+grant update (
+  onboarding, onboarding_completed_at,
+  business_name, contact_name, phone, email, service_type, region, updated_at
+) on clients to authenticated;
 
 alter table notifications      enable row level security;
 alter table notification_reads enable row level security;

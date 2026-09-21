@@ -5,6 +5,7 @@ import type { Client, Lead, Pack, PackUsage } from "@/lib/types";
 import { LeadsTable } from "@/components/leads-table";
 import { ClientStatusControl, NewPackForm, PackUsageEditor } from "@/components/client-controls";
 import { PortalAccess } from "@/components/portal-access";
+import { ONBOARDING, displayAnswer, type Answers } from "@/lib/onboarding";
 import {
   PageHeader,
   PackBar,
@@ -115,6 +116,40 @@ export default async function ClientDetailPage({ params }: PageProps<"/admin/cli
             </div>
           )}
         </div>
+      </div>
+
+      {/* ---- onboarding answers ---- */}
+      <div className="card p-5 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="font-semibold text-navy">Onboarding</h2>
+          {typedClient.onboarding_completed_at ? (
+            <Badge tone="ok">Completed {formatDate(typedClient.onboarding_completed_at)}</Badge>
+          ) : (
+            <Badge tone="warn">Not completed yet</Badge>
+          )}
+        </div>
+        {typedClient.onboarding ? (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {ONBOARDING.flatMap((section) =>
+              section.fields.map((field) => {
+                const answer = displayAnswer(field, typedClient.onboarding as Answers);
+                if (answer === "—") return null;
+                return (
+                  <div key={field.key}>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">
+                      {field.label}
+                    </div>
+                    <div className="text-body whitespace-pre-wrap">{answer}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted">
+            They&apos;ll be asked to fill this in the first time they log in.
+          </p>
+        )}
       </div>
 
       {/* ---- portal access ---- */}

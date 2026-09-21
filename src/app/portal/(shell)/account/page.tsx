@@ -2,6 +2,8 @@ import { currentPortalUser, supabaseServer } from "@/lib/supabase-server";
 import type { Pack, PackUsage } from "@/lib/types";
 import { formatDate } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { OnboardingForm } from "@/components/onboarding-form";
+import { ONBOARDING, type Answers } from "@/lib/onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +75,18 @@ export default async function AccountPage() {
           </p>
         </div>
       </div>
+
+      <h2 className="text-2xl mt-10 mb-2">How you get leads</h2>
+      <p className="text-muted mb-4">
+        Change where we send your leads. Everything else was set at signup &mdash;
+        contact us if it needs updating.
+      </p>
+      <OnboardingForm
+        initial={(client.onboarding ?? {}) as Answers}
+        sections={ONBOARDING.filter((s) => s.title === "Lead delivery")}
+        submitLabel="Save changes"
+        onlyEditable
+      />
 
       <h2 className="text-2xl mt-10 mb-4">Pack history</h2>
 

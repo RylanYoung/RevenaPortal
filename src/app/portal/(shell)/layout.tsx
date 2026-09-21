@@ -31,6 +31,11 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     );
   }
 
+  // Onboarding is a gate, not a suggestion: nothing in the portal is reachable
+  // until it's done. Lives outside this layout so they aren't shown a nav they
+  // can't use yet.
+  if (!session.client.onboarding_completed_at) redirect("/portal/welcome");
+
   return (
     <div className="min-h-screen bg-panel">
       <header className="bg-bg border-b border-line sticky top-0 z-10">
