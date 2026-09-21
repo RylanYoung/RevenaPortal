@@ -224,6 +224,13 @@ from packs p
 left join leads l on l.pack_id = p.id
 group by p.id;
 
+-- CRITICAL. Without this a view runs with its OWNER's privileges, which
+-- bypasses row level security on packs and leads entirely — every client
+-- would read every other client's pack usage through it, and so would an
+-- unauthenticated anon key. security_invoker makes the view run as whoever
+-- queries it, so the policies on the underlying tables actually apply.
+alter view pack_usage set (security_invoker = on);
+
 -- ============================================================
 -- Row Level Security
 -- Admin access runs through the service-role key, which bypasses RLS entirely.
