@@ -144,6 +144,8 @@ export async function POST(request: NextRequest) {
     // the client typed themselves.
     const who = str(payload, ["actor", "user", "agent", "assigned_to"]) ?? "Revena team";
     const stamp = new Date().toLocaleString("en-AU", {
+      // Server runs in UTC; notes must read in the client's own time.
+      timeZone: "Australia/Sydney",
       day: "numeric",
       month: "short",
       hour: "numeric",

@@ -455,7 +455,7 @@ export async function callTool(
           : "No leads delivered yet.",
         ...leads.map(
           (l) =>
-            `  ${new Date(l.received_at).toLocaleDateString("en-AU")} — ${l.name ?? "no name"} (${l.postcode ?? "?"}) — ${l.status}`
+            `  ${new Date(l.received_at).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })} — ${l.name ?? "no name"} (${l.postcode ?? "?"}) — ${l.status}`
         ),
       ].filter((l) => l !== null);
 
@@ -753,7 +753,7 @@ export async function callTool(
       return leads
         .map(
           (l) =>
-            `${new Date(l.received_at).toLocaleDateString("en-AU")} — ${l.name ?? "no name"} (${l.postcode ?? "?"}) — ${
+            `${new Date(l.received_at).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })} — ${l.name ?? "no name"} (${l.postcode ?? "?"}) — ${
               l.client_id ? names.get(l.client_id) ?? "unknown" : "UNASSIGNED"
             } — ${l.status}${l.flag_reason ? ` [${l.flag_reason}]` : ""} — id ${l.id}`
         )

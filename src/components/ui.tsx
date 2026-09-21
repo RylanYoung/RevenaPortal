@@ -145,6 +145,10 @@ export function PageHeader({
 export function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-AU", {
+    // Vercel runs in UTC. Without an explicit zone every date renders
+    // 10 hours out for an Australian reader — a lead that arrived at 9am
+    // would show as 11pm the day before.
+    timeZone: "Australia/Sydney",
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -154,6 +158,10 @@ export function formatDate(value: string | null): string {
 export function formatDateTime(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("en-AU", {
+    // Vercel runs in UTC. Without an explicit zone every date renders
+    // 10 hours out for an Australian reader — a lead that arrived at 9am
+    // would show as 11pm the day before.
+    timeZone: "Australia/Sydney",
     day: "numeric",
     month: "short",
     hour: "numeric",
