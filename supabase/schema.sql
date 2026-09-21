@@ -100,7 +100,7 @@ create table if not exists leads (
 
   -- CLIENT CRM LAYER — entirely the client's own workspace.
   -- Deliberately separate from `status`: nothing here ever affects pack counts.
-  outcome text check (outcome in ('contacted', 'quoted', 'won', 'lost', 'no_response')),
+  outcome text check (outcome in ('contacted', 'booked', 'quoted', 'won', 'lost', 'no_response')),
   crm_notes text,
   follow_up_date date,
 
@@ -117,6 +117,13 @@ create table if not exists leads (
   counts_against_pack boolean
     generated always as (status <> 'replaced') stored
 );
+
+-- 'booked' was added once setters and the AI agent started writing outcomes
+-- back in; an appointment booked is the step that matters most to a client
+-- and did not fit any of the original values.
+alter table leads drop constraint if exists leads_outcome_check;
+alter table leads add constraint leads_outcome_check
+  check (outcome in ('contacted', 'booked', 'quoted', 'won', 'lost', 'no_response'));
 
 -- GHL retries and double-firing automations must not create duplicate leads.
 create unique index if not exists leads_ghl_contact_id_unique

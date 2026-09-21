@@ -35,6 +35,7 @@ export type FlagReason = (typeof FLAG_REASONS)[number];
 /** The client's own sales pipeline stage. Never affects pack counts. */
 export const OUTCOMES = [
   "contacted",
+  "booked",
   "quoted",
   "won",
   "lost",
@@ -140,6 +141,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 
 export const OUTCOME_LABELS: Record<Outcome, string> = {
   contacted: "Contacted",
+  booked: "Booked",
   quoted: "Quoted",
   won: "Won",
   lost: "Lost",
