@@ -287,7 +287,7 @@ async function sendPortalSetup(
   origin: string
 ): Promise<{ ok: true; existing: boolean } | { ok: false; error: string }> {
   const db = supabaseAdmin();
-  const redirectTo = `${origin}/portal/auth/callback?next=/portal/reset`;
+  const redirectTo = `${origin}/portal/auth/setup`;
 
   const { data: list } = await db.auth.admin.listUsers();
   const existing = list?.users.find((u) => u.email?.toLowerCase() === email);

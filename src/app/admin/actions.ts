@@ -216,9 +216,9 @@ export async function invitePortalUser(
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = host.startsWith("localhost") ? "http" : "https";
-  // ?next drops them on the choose-a-password screen once the callback has
-  // exchanged the code for a session.
-  const redirectTo = `${proto}://${host}/portal/auth/callback?next=/portal/reset`;
+  // Dedicated path, not a query param: Supabase strips the query string off
+  // a redirect target, which silently sent people to the dashboard instead.
+  const redirectTo = `${proto}://${host}/portal/auth/setup`;
 
   const { data: list } = await db.auth.admin.listUsers();
   const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
@@ -278,9 +278,8 @@ export async function sendPasswordReset(
   });
 
   const { error } = await auth.auth.resetPasswordForEmail(email, {
-    // ?next sends them to the choose-a-password screen after the callback
-    // has exchanged the code for a session.
-    redirectTo: `${proto}://${host}/portal/auth/callback?next=/portal/reset`,
+    // Dedicated path — Supabase strips query strings off redirect targets.
+    redirectTo: `${proto}://${host}/portal/auth/setup`,
   });
 
   if (error) return { ok: false, error: error.message };
