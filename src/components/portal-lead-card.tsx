@@ -129,6 +129,14 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
           We&apos;re reviewing it — nothing to do from here.
         </p>
       )}
+      {/* Taken off the count by an admin, but still a lead they can work.
+          Silence here would read as an ordinary delivered lead, and the
+          client would have no idea their pack hadn't moved. */}
+      {lead.status === "delivered" && !lead.counts_against_pack && (
+        <p className="mt-4 rounded-xl bg-ok-tint px-4 py-3 text-sm text-ok animate-fade-in">
+          This one&apos;s on us — it doesn&apos;t count against your pack.
+        </p>
+      )}
       {lead.status === "replaced" && (
         <p className="mt-4 rounded-xl bg-panel px-4 py-3 text-sm text-body animate-fade-in">
           Replaced — this one doesn&apos;t count against your pack.
