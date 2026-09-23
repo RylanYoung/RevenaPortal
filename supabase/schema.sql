@@ -125,6 +125,39 @@ alter table leads drop constraint if exists leads_outcome_check;
 alter table leads add constraint leads_outcome_check
   check (outcome in ('contacted', 'booked', 'quoted', 'won', 'lost', 'no_response'));
 
+-- Flag reasons, reworded. "Uncontactable" invited complaints like "called
+-- four times over three days", which is not grounds for a replacement — a
+-- lead that simply hasn't answered yet is still a lead. The reasons now
+-- describe a lead that was never deliverable in the first place. The old
+-- values stay legal so any row already carrying one remains valid.
+alter table leads drop constraint if exists leads_flag_reason_check;
+alter table leads add constraint leads_flag_reason_check
+  check (flag_reason in (
+    'Not in service area',
+    'Phone number doesn''t work',
+    'Fake or spam details',
+    'Already a customer',
+    'Other',
+    -- legacy, no longer offered
+    'Fake/spam', 'Uncontactable'
+  ));
+
+-- ---------- manual control over what counts ----------
+-- Whether a lead counts is no longer purely a function of its status. An
+-- admin can exclude one by hand, and a client can be set so incoming leads
+-- arrive excluded and have to be accepted before they count.
+alter table leads add column if not exists excluded_from_pack boolean not null default false;
+alter table clients add column if not exists auto_count_leads boolean not null default true;
+
+-- counts_against_pack has to be rebuilt to take the new column into account.
+-- It is a generated column, so its values are derived rather than stored
+-- input — dropping and recreating it recomputes every row and loses nothing.
+-- pack_usage depends on it and is recreated further down.
+drop view if exists pack_usage;
+alter table leads drop column if exists counts_against_pack;
+alter table leads add column counts_against_pack boolean
+  generated always as (status <> 'replaced' and not excluded_from_pack) stored;
+
 -- GHL retries and double-firing automations must not create duplicate leads.
 create unique index if not exists leads_ghl_contact_id_unique
   on leads (ghl_contact_id) where ghl_contact_id is not null;

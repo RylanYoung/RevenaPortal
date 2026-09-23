@@ -176,6 +176,52 @@ export async function setPackUsage(
 // ------------------------------------------------------------------ leads
 
 /**
+ * Takes a lead on or off the pack count by hand.
+ *
+ * Separate from `replaced`: a replacement is a quality decision with a reason
+ * behind it, whereas this is just "don't bill them for this one". Keeping them
+ * apart means the replacement rate stays a measure of lead quality rather than
+ * a bin for every adjustment.
+ */
+export async function setLeadCounts(
+  leadId: string,
+  counts: boolean,
+  clientId: string | null
+) {
+  const db = supabaseAdmin();
+
+  await db
+    .from("leads")
+    .update({ excluded_from_pack: !counts, updated_at: new Date().toISOString() })
+    .eq("id", leadId);
+
+  await db.from("lead_events").insert({
+    lead_id: leadId,
+    event_type: counts ? "accepted" : "excluded",
+    new_value: counts ? "counts" : "not counted",
+    actor: "admin",
+  });
+
+  revalidatePath("/admin/leads");
+  revalidatePath("/admin");
+  if (clientId) revalidatePath(`/admin/clients/${clientId}`);
+}
+
+/**
+ * Whether new leads for a client count on arrival, or wait to be accepted.
+ */
+export async function setAutoCount(clientId: string, auto: boolean) {
+  const db = supabaseAdmin();
+  await db
+    .from("clients")
+    .update({ auto_count_leads: auto, updated_at: new Date().toISOString() })
+    .eq("id", clientId);
+
+  revalidatePath(`/admin/clients/${clientId}`);
+  revalidatePath("/admin/leads");
+}
+
+/**
  * Places a lead with a client — used from the unassigned queue when GHL
  * tagging misfires, and to correct a mis-routed lead.
  */

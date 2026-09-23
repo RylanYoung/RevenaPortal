@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   // ---- route to a client by tag ----
   const { data: clients, error: clientsError } = await db
     .from("clients")
-    .select("id, ghl_tag_reference, status")
+    .select("id, ghl_tag_reference, status, auto_count_leads")
     .not("ghl_tag_reference", "is", null);
 
   if (clientsError) {
@@ -133,6 +133,12 @@ export async function POST(request: NextRequest) {
       ghl_tags: lead.ghl_tags,
       raw_payload: payload,
       status: "delivered",
+      // A client set to review first gets leads that arrive off the count.
+      // The lead is still delivered and visible either way — this only
+      // decides whether it's billed before someone has looked at it.
+      excluded_from_pack: matchedClient
+        ? matchedClient.auto_count_leads === false
+        : false,
     })
     .select("id")
     .single();

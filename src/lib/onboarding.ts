@@ -163,6 +163,22 @@ export function validate(answers: Answers): string | null {
 
     if (empty) return `${field.label} is required.`;
   }
+
+  // Shape checks on whatever was filled in, required or not. A phone field
+  // holding "25" passed the empty-check alone and would have had SMS leads
+  // sent nowhere.
+  for (const field of ALL_FIELDS) {
+    if (!isVisible(field, answers)) continue;
+    const value = answers[field.key];
+    if (typeof value !== "string" || !value.trim()) continue;
+
+    if (field.type === "tel" && value.replace(/\D/g, "").length < 8) {
+      return `${field.label} doesn't look like a full phone number.`;
+    }
+    if (field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+      return `${field.label} doesn't look like a valid email address.`;
+    }
+  }
   return null;
 }
 

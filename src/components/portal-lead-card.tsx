@@ -1,37 +1,58 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { flagLead, saveCrm } from "@/app/portal/actions";
+import { useActionState, useState, useTransition } from "react";
+import { flagLead, setOutcome, saveNote } from "@/app/portal/actions";
 import {
   FLAG_REASONS,
   OUTCOMES,
   OUTCOME_LABELS,
   type Lead,
+  type Outcome,
 } from "@/lib/types";
-import { LeadStatusBadge, Badge, formatDateTime, formatDate } from "./ui";
+import { extraDetails } from "@/lib/lead-details";
+import { LeadStatusBadge, formatDateTime, formatDate } from "./ui";
 
+/**
+ * One lead, as the client sees it.
+ *
+ * The CRM used to be two nested panels behind two toggles — open "Track this
+ * lead", pick from a dropdown, find Save. Setting a status is now one tap on
+ * the card itself, which is the thing a client does most and should cost the
+ * least.
+ */
 export function PortalLeadCard({ lead }: { lead: Lead }) {
-  const [openPanel, setOpenPanel] = useState<"none" | "crm" | "flag">("none");
+  const [showNote, setShowNote] = useState(false);
+  const [showFlag, setShowFlag] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
-  const [crmResult, crmAction, crmPending] = useActionState(saveCrm, null);
+  // Optimistic: the pill highlights the moment it's tapped.
+  const [outcome, setLocalOutcome] = useState<Outcome | null>(lead.outcome);
+  const [, startOutcome] = useTransition();
+
+  const [noteResult, noteAction, notePending] = useActionState(saveNote, null);
   const [flagResult, flagAction, flagPending] = useActionState(flagLead, null);
 
-  // Close the flag panel once it's been raised — the status badge above now
-  // tells the story, and leaving the form open invites a second submission.
-  if (flagResult?.ok && openPanel === "flag") setOpenPanel("none");
+  if (flagResult?.ok && showFlag) setShowFlag(false);
+  if (noteResult?.ok && showNote) setShowNote(false);
 
   const canFlag = lead.status === "delivered";
+  const details = extraDetails(lead);
+
+  function pick(next: Outcome) {
+    const value = outcome === next ? null : next; // Tapping again clears it.
+    setLocalOutcome(value);
+    startOutcome(() => setOutcome(lead.id, value));
+  }
 
   return (
     <div className="card p-6">
-      {/* ---- the lead itself ---- */}
+      {/* ---- the lead ---- */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-xl font-semibold">{lead.name ?? "New lead"}</h3>
 
           <div className="mt-2 flex flex-col gap-1 text-base">
             {lead.phone && (
-              // Tap-to-call: most of these get actioned from a phone.
               <a
                 href={`tel:${lead.phone.replace(/\s/g, "")}`}
                 className="text-blue font-semibold hover:underline w-fit"
@@ -57,17 +78,34 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <LeadStatusBadge status={lead.status} />
-          {lead.outcome && (
-            <Badge tone={lead.outcome === "won" ? "ok" : "neutral"}>
-              {OUTCOME_LABELS[lead.outcome]}
-            </Badge>
-          )}
-        </div>
+        <LeadStatusBadge status={lead.status} />
       </div>
 
-      {/* ---- what's already been said about this lead ---- */}
+      {/* ---- everything else GHL sent ---- */}
+      {details.length > 0 && (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowDetails((v) => !v)}
+            className="text-sm text-muted hover:text-navy transition-colors"
+          >
+            {showDetails ? "Hide details" : `View all details (${details.length})`}
+          </button>
+          {showDetails && (
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2 rounded-xl bg-panel p-4 animate-fade-in">
+              {details.map((d) => (
+                <div key={d.label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {d.label}
+                  </dt>
+                  <dd className="text-body break-words">{d.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
+
+      {/* ---- what's already been said ---- */}
       {lead.status === "replacement_requested" && (
         <p className="mt-4 rounded-xl bg-warn-tint px-4 py-3 text-sm text-warn animate-fade-in">
           You&apos;ve reported this one{lead.flag_reason ? `: ${lead.flag_reason}` : ""}.
@@ -86,128 +124,103 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
         </p>
       )}
 
-      {/* ---- toggles ---- */}
-      <div className="mt-5 flex flex-wrap gap-3 border-t border-line pt-4">
+      {/* ---- one-tap status ---- */}
+      <div className="mt-5 border-t border-line pt-4">
+        <div className="text-sm text-muted mb-3">Where&apos;s it at?</div>
+        <div className="flex flex-wrap gap-2">
+          {OUTCOMES.map((o) => {
+            const on = outcome === o;
+            return (
+              <button
+                key={o}
+                onClick={() => pick(o)}
+                aria-pressed={on}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                  on
+                    ? "bg-blue text-white"
+                    : "bg-panel text-body hover:text-navy"
+                }`}
+              >
+                {OUTCOME_LABELS[o]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ---- notes ---- */}
+      {lead.crm_notes && !showNote && (
+        <div className="mt-4 rounded-xl bg-panel px-4 py-3 text-sm text-body whitespace-pre-wrap">
+          {lead.crm_notes}
+        </div>
+      )}
+      {lead.follow_up_date && !showNote && (
+        <p className="mt-3 text-sm text-muted">
+          Follow up {formatDate(lead.follow_up_date)}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-4">
         <button
-          onClick={() => setOpenPanel(openPanel === "crm" ? "none" : "crm")}
+          onClick={() => setShowNote((v) => !v)}
           className="btn btn-ghost btn-sm"
         >
-          {openPanel === "crm" ? "Close" : "Track this lead"}
-          <span
-            className={`transition-transform duration-200 ${
-              openPanel === "crm" ? "rotate-90" : ""
-            }`}
-          >
-            →
-          </span>
+          {showNote ? "Cancel" : lead.crm_notes ? "Edit notes" : "Add a note"}
         </button>
-
         {canFlag && (
           <button
-            onClick={() => setOpenPanel(openPanel === "flag" ? "none" : "flag")}
+            onClick={() => setShowFlag((v) => !v)}
             className="text-sm text-muted hover:text-danger transition-colors"
           >
-            {openPanel === "flag" ? "Cancel" : "Report a problem"}
+            {showFlag ? "Cancel" : "Report a problem"}
           </button>
         )}
       </div>
 
-      {/* ---- optional CRM panel ---- */}
-      {openPanel === "crm" && (
-        <form action={crmAction} className="mt-5 animate-fade-up">
+      {showNote && (
+        <form action={noteAction} className="mt-4 animate-fade-up">
           <input type="hidden" name="lead_id" value={lead.id} />
-
-          <p className="text-sm text-muted mb-4">
-            Just for you — keep track of where this one&apos;s up to. Nothing here
-            affects your pack.
-          </p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor={`outcome-${lead.id}`}>
-                Where&apos;s it at?
-              </label>
-              <select
-                id={`outcome-${lead.id}`}
-                name="outcome"
-                defaultValue={lead.outcome ?? ""}
-                className="field"
-              >
-                <option value="">Not set</option>
-                {OUTCOMES.map((o) => (
-                  <option key={o} value={o}>
-                    {OUTCOME_LABELS[o]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+          <textarea
+            name="crm_notes"
+            rows={3}
+            defaultValue={lead.crm_notes ?? ""}
+            className="field"
+            placeholder="Quoted $8,400 — calling back Tuesday…"
+          />
+          <div className="mt-3 flex flex-wrap items-end gap-3">
             <div>
               <label className="label" htmlFor={`follow-${lead.id}`}>
-                Follow up on
+                Remind me on
               </label>
               <input
                 id={`follow-${lead.id}`}
                 name="follow_up_date"
                 type="date"
                 defaultValue={lead.follow_up_date ?? ""}
-                className="field"
+                className="field w-auto"
               />
             </div>
-
-            <div className="sm:col-span-2">
-              <label className="label" htmlFor={`notes-${lead.id}`}>
-                Your notes
-              </label>
-              <textarea
-                id={`notes-${lead.id}`}
-                name="crm_notes"
-                rows={3}
-                defaultValue={lead.crm_notes ?? ""}
-                className="field"
-                placeholder="Quoted $8,400 — calling back Tuesday…"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-3">
-            <button type="submit" disabled={crmPending} className="btn btn-primary btn-sm">
-              {crmPending ? "Saving…" : "Save"}
+            <button type="submit" disabled={notePending} className="btn btn-primary btn-sm">
+              {notePending ? "Saving…" : "Save"}
             </button>
-            {crmResult?.ok && (
-              <span className="text-sm text-ok font-semibold animate-fade-in">
-                Saved
-              </span>
-            )}
-            {crmResult && !crmResult.ok && (
-              <span className="text-sm text-danger">{crmResult.error}</span>
-            )}
           </div>
+          {noteResult && !noteResult.ok && (
+            <p className="mt-2 text-sm text-danger">{noteResult.error}</p>
+          )}
         </form>
       )}
 
-      {/* ---- flag panel ---- */}
-      {openPanel === "flag" && (
-        <form action={flagAction} className="mt-5 animate-fade-up">
+      {showFlag && (
+        <form action={flagAction} className="mt-4 animate-fade-up">
           <input type="hidden" name="lead_id" value={lead.id} />
-
-          <p className="text-sm text-muted mb-4">
-            Tell us what went wrong and we&apos;ll take a look. We&apos;ll come back
-            to you — nothing changes on your pack until we do.
+          <p className="text-sm text-muted mb-3">
+            Only for leads we shouldn&apos;t have sent — wrong area, bad number,
+            fake details. We&apos;ll look into it and come back to you.
           </p>
 
-          <label className="label" htmlFor={`reason-${lead.id}`}>
-            What was wrong?
-          </label>
-          <select
-            id={`reason-${lead.id}`}
-            name="flag_reason"
-            required
-            defaultValue=""
-            className="field"
-          >
+          <select name="flag_reason" required defaultValue="" className="field">
             <option value="" disabled>
-              Choose a reason…
+              What was wrong?
             </option>
             {FLAG_REASONS.map((r) => (
               <option key={r} value={r}>
@@ -216,15 +229,11 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
             ))}
           </select>
 
-          <label className="label mt-4" htmlFor={`flagnote-${lead.id}`}>
-            Anything else? <span className="font-normal text-muted">(optional)</span>
-          </label>
           <textarea
-            id={`flagnote-${lead.id}`}
             name="flag_note"
-            rows={3}
-            className="field"
-            placeholder="Called 4 times over 3 days, number goes to voicemail…"
+            rows={2}
+            className="field mt-3"
+            placeholder="Anything else? e.g. the number rings out to a disconnected message"
           />
 
           {flagResult && !flagResult.ok && (
@@ -234,19 +243,11 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
           <button
             type="submit"
             disabled={flagPending}
-            className="btn btn-primary btn-sm mt-4"
+            className="btn btn-primary btn-sm mt-3"
           >
             {flagPending ? "Sending…" : "Send report"}
           </button>
         </form>
-      )}
-
-      {/* A follow-up date the client set is worth surfacing without opening
-          the panel — otherwise they'd have to expand every card to find it. */}
-      {lead.follow_up_date && openPanel !== "crm" && (
-        <p className="mt-3 text-sm text-muted">
-          Follow up {formatDate(lead.follow_up_date)}
-        </p>
       )}
     </div>
   );

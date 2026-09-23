@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase-admin";
 import type { Client, Lead, PackUsage } from "./types";
+import { ALL_FIELDS, displayAnswer, type Answers } from "./onboarding";
 
 /**
  * The "Revena Admin" tool surface.
@@ -339,6 +340,22 @@ async function sendPortalSetup(
   return { ok: true, existing: Boolean(existing) };
 }
 
+/** The onboarding answers as readable lines, using the form's own labels. */
+function describeOnboarding(client: Client): string[] {
+  if (!client.onboarding_completed_at || !client.onboarding) {
+    return ["Onboarding: not completed yet."];
+  }
+  const answers = client.onboarding as Answers;
+  const lines = [
+    `Onboarding (completed ${new Date(client.onboarding_completed_at).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })}):`,
+  ];
+  for (const field of ALL_FIELDS) {
+    const answer = displayAnswer(field, answers);
+    if (answer !== "—") lines.push(`  ${field.label}: ${answer}`);
+  }
+  return lines;
+}
+
 function describePack(usage: PackUsage | null | undefined): string {
   if (!usage) return "No active pack.";
   return `${usage.leads_used} of ${usage.size} used, ${usage.leads_remaining} remaining${
@@ -449,6 +466,8 @@ export async function callTool(
         `Service: ${client.service_type}${client.region ? ` in ${client.region}` : ""}`,
         `GHL tag: ${client.ghl_tag_reference ?? "NOT SET — leads can't route here"}`,
         `Pack: ${describePack(usageRes.data as PackUsage | null)}`,
+        "",
+        ...describeOnboarding(client),
         "",
         leads.length
           ? `Last ${leads.length} leads:`

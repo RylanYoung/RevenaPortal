@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Lead } from "@/lib/types";
 import { LeadStatusBadge, EmptyState, formatDateTime } from "./ui";
+import { CountToggle } from "./count-toggle";
 
 /**
  * Shared lead table. Used on the all-leads view and on a client's detail page;
@@ -36,6 +37,7 @@ export function LeadsTable({
               <th className="px-4 py-3 font-semibold">Postcode</th>
               <th className="px-4 py-3 font-semibold">Type</th>
               <th className="px-4 py-3 font-semibold">Source</th>
+              <th className="px-4 py-3 font-semibold">Counts</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -81,6 +83,14 @@ export function LeadsTable({
                 </td>
                 <td className="px-4 py-3 text-muted max-w-[180px] truncate">
                   {lead.source ?? "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <CountToggle
+                    leadId={lead.id}
+                    clientId={lead.client_id}
+                    counts={lead.counts_against_pack}
+                    replaced={lead.status === "replaced"}
+                  />
                 </td>
                 <td className="px-4 py-3">
                   <LeadStatusBadge status={lead.status} />

@@ -52,17 +52,31 @@ export async function flagLead(
  * Saves the client's own CRM fields. Entirely their workspace — none of this
  * touches delivery status or pack counts.
  */
-export async function saveCrm(
+/**
+ * Sets (or clears) the client's own status for a lead — one tap, no form.
+ *
+ * Deliberately separate from saveNote. When both lived in one action, saving
+ * a note also wrote whatever the outcome field happened to hold, so a form
+ * that didn't carry an outcome would silently clear it.
+ */
+export async function setOutcome(leadId: string, outcome: Outcome | null) {
+  if (!leadId) return;
+  if (outcome && !(OUTCOMES as readonly string[]).includes(outcome)) return;
+
+  const db = await supabaseServer();
+  await db.from("leads").update({ outcome }).eq("id", leadId);
+
+  revalidatePath("/portal/leads");
+  revalidatePath("/portal");
+}
+
+/** Saves the client's own notes and reminder date. Never touches the outcome. */
+export async function saveNote(
   _prev: Result | null,
   formData: FormData
 ): Promise<Result> {
   const leadId = String(formData.get("lead_id") ?? "");
   if (!leadId) return { ok: false, error: "Missing lead." };
-
-  const outcomeRaw = String(formData.get("outcome") ?? "");
-  const outcome = (OUTCOMES as readonly string[]).includes(outcomeRaw)
-    ? (outcomeRaw as Outcome)
-    : null;
 
   const notes = String(formData.get("crm_notes") ?? "").trim();
   const followUp = String(formData.get("follow_up_date") ?? "").trim();
@@ -72,7 +86,6 @@ export async function saveCrm(
   const { error } = await db
     .from("leads")
     .update({
-      outcome,
       crm_notes: notes || null,
       follow_up_date: followUp || null,
     })

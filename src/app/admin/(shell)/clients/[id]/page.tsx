@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Client, Lead, Pack, PackUsage } from "@/lib/types";
 import { LeadsTable } from "@/components/leads-table";
 import { ClientStatusControl, NewPackForm, PackUsageEditor } from "@/components/client-controls";
+import { AutoCountToggle } from "@/components/count-toggle";
 import { PortalAccess } from "@/components/portal-access";
 import { ONBOARDING, displayAnswer, type Answers } from "@/lib/onboarding";
 import {
@@ -206,6 +207,14 @@ export default async function ClientDetailPage({ params }: PageProps<"/admin/cli
           won&apos;t count against anything until you start one.
         </div>
       )}
+
+      {/* ---- counting behaviour ---- */}
+      <div className="card p-5 mb-8">
+        <AutoCountToggle
+          clientId={typedClient.id}
+          auto={typedClient.auto_count_leads}
+        />
+      </div>
 
       {/* ---- pack history ---- */}
       <h2 className="text-lg font-semibold text-navy mb-4">

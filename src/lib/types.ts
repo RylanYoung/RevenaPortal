@@ -23,10 +23,17 @@ export const LEAD_STATUSES = [
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 /** The standardised reasons a client can give when flagging a lead. */
+/**
+ * What a client can report a lead for.
+ *
+ * These describe a lead that was never deliverable. "Uncontactable" used to be
+ * here and invited complaints like "called four times over three days" — which
+ * isn't grounds for a replacement, it's just a lead that hasn't answered yet.
+ */
 export const FLAG_REASONS = [
   "Not in service area",
-  "Fake/spam",
-  "Uncontactable",
+  "Phone number doesn't work",
+  "Fake or spam details",
   "Already a customer",
   "Other",
 ] as const;
@@ -60,6 +67,8 @@ export type Client = {
   notes: string | null;
   onboarding: Record<string, unknown> | null;
   onboarding_completed_at: string | null;
+  /** When false, incoming leads arrive excluded and must be accepted. */
+  auto_count_leads: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -119,6 +128,8 @@ export type Lead = {
   received_at: string;
   created_at: string;
   updated_at: string;
+  /** Set by an admin to take a lead off the count without replacing it. */
+  excluded_from_pack: boolean;
   counts_against_pack: boolean;
 };
 
