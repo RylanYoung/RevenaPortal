@@ -92,7 +92,15 @@ function extractName(payload: Json): string | null {
   return joined || null;
 }
 
-/** AU postcodes are 4 digits; pull them out of anything messier. */
+/**
+ * AU postcodes are 4 digits; pull them out of anything messier.
+ *
+ * Falls back to the address when there's no postcode field of its own — a
+ * payload carrying "12 Barton Street, Orange NSW 2800" and nothing else has
+ * the postcode in it, and leaving it blank loses a field the client filters on.
+ * The LAST four-digit group is taken, because a street number can also be four
+ * digits and always comes first.
+ */
 function extractPostcode(payload: Json): string | null {
   const raw = pick(payload, [
     "postal_code",
@@ -102,9 +110,23 @@ function extractPostcode(payload: Json): string | null {
     "zip",
     "zip_code",
   ]);
-  if (!raw) return null;
-  const match = raw.match(/\d{4}/);
-  return match ? match[0] : raw.slice(0, 16);
+
+  if (raw) {
+    const match = raw.match(/\d{4}/);
+    return match ? match[0] : raw.slice(0, 16);
+  }
+
+  const address = pick(payload, [
+    "address",
+    "address1",
+    "full_address",
+    "street_address",
+    "street",
+  ]);
+  if (!address) return null;
+
+  const all = address.match(/\d{4}/g);
+  return all ? all[all.length - 1] : null;
 }
 
 /**
