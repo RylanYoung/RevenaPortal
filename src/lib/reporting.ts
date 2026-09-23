@@ -6,7 +6,7 @@ export type MonthBucket = {
   fullLabel: string; // "September 2026"
   total: number;
   counted: number; // leads that count against a pack
-  replaced: number; // credited back, don't count
+  notCounted: number; // replaced, or taken off the count by an admin
   won: number;
   tracked: number; // leads with any outcome set
 };
@@ -32,7 +32,7 @@ export function bucketByMonth(leads: Lead[], months = 12): MonthBucket[] {
       fullLabel: d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
       total: 0,
       counted: 0,
-      replaced: 0,
+      notCounted: 0,
       won: 0,
       tracked: 0,
     };
@@ -47,8 +47,11 @@ export function bucketByMonth(leads: Lead[], months = 12): MonthBucket[] {
     if (!bucket) continue; // Older than the window.
 
     bucket.total++;
-    if (lead.status === "replaced") bucket.replaced++;
-    else bucket.counted++;
+    // counts_against_pack, not status: a lead an admin simply took off the
+    // count is still 'delivered', and judging by status alone would show it
+    // as counted here while the client's pack said otherwise.
+    if (lead.counts_against_pack) bucket.counted++;
+    else bucket.notCounted++;
     if (lead.outcome) bucket.tracked++;
     if (lead.outcome === "won") bucket.won++;
   }
@@ -59,32 +62,33 @@ export function bucketByMonth(leads: Lead[], months = 12): MonthBucket[] {
 export type Totals = {
   total: number;
   counted: number;
-  replaced: number;
+  notCounted: number;
   won: number;
   tracked: number;
   /** won / tracked — null when they haven't used the CRM section at all. */
   closeRate: number | null;
-  /** replaced / total — null with no leads. */
-  replacementRate: number | null;
+  /** not counted / total — null with no leads. */
+  notCountedRate: number | null;
 };
 
 export function summarise(leads: Lead[]): Totals {
   const total = leads.length;
-  const replaced = leads.filter((l) => l.status === "replaced").length;
+  const counted = leads.filter((l) => l.counts_against_pack).length;
+  const notCounted = total - counted;
   const tracked = leads.filter((l) => l.outcome).length;
   const won = leads.filter((l) => l.outcome === "won").length;
 
   return {
     total,
-    counted: total - replaced,
-    replaced,
+    counted,
+    notCounted,
     won,
     tracked,
     // Rate is against TRACKED leads, not all leads — dividing by every lead
     // would report a close rate of near-zero for someone who only tracked a
     // handful, which reads as a failure rather than as missing data.
     closeRate: tracked > 0 ? won / tracked : null,
-    replacementRate: total > 0 ? replaced / total : null,
+    notCountedRate: total > 0 ? notCounted / total : null,
   };
 }
 

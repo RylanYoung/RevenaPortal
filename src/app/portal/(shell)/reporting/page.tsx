@@ -81,11 +81,11 @@ export default async function ReportingPage() {
               hint="Against your packs"
             />
             <Tile
-              label="Replaced"
-              value={totals.replaced}
+              label="Not counted"
+              value={totals.notCounted}
               hint={
-                totals.replacementRate !== null && totals.replaced > 0
-                  ? `${Math.round(totals.replacementRate * 100)}% of leads`
+                totals.notCountedRate !== null && totals.notCounted > 0
+                  ? `${Math.round(totals.notCountedRate * 100)}% of leads`
                   : "None"
               }
             />

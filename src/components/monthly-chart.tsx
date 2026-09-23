@@ -17,7 +17,7 @@ import type { MonthBucket } from "@/lib/reporting";
 // values are chosen (blue lifts to #6A78FF), not an inversion; validated on
 // the dark surface at deltaE 15.2 protan / 15.6 normal.
 const COUNTED = "var(--color-blue)";
-const REPLACED = "var(--color-muted)";
+const NOT_COUNTED = "var(--color-muted)";
 
 const W = 760;
 const H = 260;
@@ -53,7 +53,7 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
 
   const peak = Math.max(...data.map((d) => d.total), 0);
   const max = niceMax(peak);
-  const hasAnyReplaced = data.some((d) => d.replaced > 0);
+  const hasAnyNotCounted = data.some((d) => d.notCounted > 0);
 
   const slot = PLOT_W / data.length;
   const barW = Math.min(slot * 0.58, 46);
@@ -75,10 +75,10 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
   return (
     <div>
       {/* ---- legend: always present for 2 series ---- */}
-      {hasAnyReplaced && (
+      {hasAnyNotCounted && (
         <div className="flex flex-wrap items-center gap-5 mb-4">
           <LegendItem color={COUNTED} label="Counted" />
-          <LegendItem color={REPLACED} label="Replaced" />
+          <LegendItem color={NOT_COUNTED} label="Not counted" />
         </div>
       )}
 
@@ -117,10 +117,10 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
             const x = cx - barW / 2;
 
             const countedH = (d.counted / max) * PLOT_H;
-            const replacedH = (d.replaced / max) * PLOT_H;
+            const replacedH = (d.notCounted / max) * PLOT_H;
 
             // 2px surface gap between stacked segments.
-            const GAP = d.replaced > 0 && d.counted > 0 ? 2 : 0;
+            const GAP = d.notCounted > 0 && d.counted > 0 ? 2 : 0;
             const countedY = PAD.top + PLOT_H - countedH;
             const replacedY = countedY - GAP - replacedH;
 
@@ -131,18 +131,18 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
               <g key={d.key} opacity={dim ? 0.45 : 1} style={{ transition: "opacity .15s" }}>
                 {d.counted > 0 && (
                   <path
-                    d={barPath(x, countedY, barW, countedH, d.replaced > 0 ? 0 : 4)}
+                    d={barPath(x, countedY, barW, countedH, d.notCounted > 0 ? 0 : 4)}
                     fill={COUNTED}
                   />
                 )}
-                {d.replaced > 0 && (
-                  <path d={barPath(x, replacedY, barW, replacedH, 4)} fill={REPLACED} />
+                {d.notCounted > 0 && (
+                  <path d={barPath(x, replacedY, barW, replacedH, 4)} fill={NOT_COUNTED} />
                 )}
 
                 {showLabel && d.total > 0 && (
                   <text
                     x={cx}
-                    y={(d.replaced > 0 ? replacedY : countedY) - 7}
+                    y={(d.notCounted > 0 ? replacedY : countedY) - 7}
                     textAnchor="middle"
                     fill="var(--color-navy)"
                     fontSize={12}
@@ -193,9 +193,9 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
             <div className="text-lg font-bold tabular-nums">
               {active.total} {active.total === 1 ? "lead" : "leads"}
             </div>
-            {active.replaced > 0 && (
+            {active.notCounted > 0 && (
               <div className="text-xs opacity-80">
-                {active.counted} counted · {active.replaced} replaced
+                {active.counted} counted · {active.notCounted} not counted
               </div>
             )}
             {active.won > 0 && (
@@ -217,7 +217,7 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
                 <th className="px-3 py-2 font-semibold">Month</th>
                 <th className="px-3 py-2 font-semibold">Total</th>
                 <th className="px-3 py-2 font-semibold">Counted</th>
-                <th className="px-3 py-2 font-semibold">Replaced</th>
+                <th className="px-3 py-2 font-semibold">Not counted</th>
                 <th className="px-3 py-2 font-semibold">Won</th>
               </tr>
             </thead>
@@ -229,7 +229,7 @@ export function MonthlyChart({ data }: { data: MonthBucket[] }) {
                     {d.total}
                   </td>
                   <td className="px-3 py-2 tabular-nums text-body">{d.counted}</td>
-                  <td className="px-3 py-2 tabular-nums text-body">{d.replaced}</td>
+                  <td className="px-3 py-2 tabular-nums text-body">{d.notCounted}</td>
                   <td className="px-3 py-2 tabular-nums text-body">{d.won}</td>
                 </tr>
               ))}
