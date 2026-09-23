@@ -70,6 +70,17 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
             )}
           </div>
 
+          {lead.address && (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 block text-body hover:text-blue w-fit"
+            >
+              {lead.address}
+            </a>
+          )}
+
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
             <span>{formatDateTime(lead.received_at)}</span>
             {lead.postcode && <span>· {lead.postcode}</span>}
@@ -81,17 +92,23 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
         <LeadStatusBadge status={lead.status} />
       </div>
 
-      {/* ---- everything else GHL sent ---- */}
+      {/* ---- everything else GHL sent ----
+           Shown inline rather than behind a toggle: the bill size and the
+           timeline ARE the value of the lead, and hiding them behind a click
+           buries the reason someone would pick up the phone. Only collapses
+           once there are more than six, where it becomes a wall. */}
       {details.length > 0 && (
         <div className="mt-4">
-          <button
-            onClick={() => setShowDetails((v) => !v)}
-            className="text-sm text-muted hover:text-navy transition-colors"
-          >
-            {showDetails ? "Hide details" : `View all details (${details.length})`}
-          </button>
-          {showDetails && (
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2 rounded-xl bg-panel p-4 animate-fade-in">
+          {details.length > 6 && (
+            <button
+              onClick={() => setShowDetails((v) => !v)}
+              className="text-sm text-muted hover:text-navy transition-colors mb-2"
+            >
+              {showDetails ? "Hide details" : `View all details (${details.length})`}
+            </button>
+          )}
+          {(details.length <= 6 || showDetails) && (
+            <dl className="grid gap-3 sm:grid-cols-2 rounded-xl bg-panel p-4">
               {details.map((d) => (
                 <div key={d.label}>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-muted">

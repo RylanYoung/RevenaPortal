@@ -19,18 +19,39 @@ function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Reads the first key that holds a usable string, searching nested scopes too. */
-function pick(payload: Json, keys: string[]): string | null {
-  // Contact detail can sit at the top level or nested under one of these.
+/**
+ * Strips case and separators from a key.
+ *
+ * GHL sends `firstname`, `first_name` and `firstName` depending on how the
+ * field was set up — matching exact spellings meant a payload using the plain
+ * lowercase form arrived with a blank name. Comparing normalised keys makes
+ * all three the same key.
+ */
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Every scope a contact detail might sit in, keyed by normalised name. */
+function scopesOf(payload: Json): Map<string, unknown>[] {
   const scopes: Json[] = [payload];
   for (const nested of ["contact", "customData", "custom_data", "data"]) {
     const value = payload[nested];
     if (isObject(value)) scopes.push(value);
   }
+  return scopes.map((scope) => {
+    const map = new Map<string, unknown>();
+    for (const [k, v] of Object.entries(scope)) map.set(normalizeKey(k), v);
+    return map;
+  });
+}
 
-  for (const scope of scopes) {
-    for (const key of keys) {
-      const value = scope[key];
+/** Reads the first key that holds a usable string, searching nested scopes too. */
+function pick(payload: Json, keys: string[]): string | null {
+  const wanted = keys.map(normalizeKey);
+
+  for (const scope of scopesOf(payload)) {
+    for (const key of wanted) {
+      const value = scope.get(key);
       if (typeof value === "string" && value.trim()) return value.trim();
       if (typeof value === "number") return String(value);
     }
@@ -40,15 +61,9 @@ function pick(payload: Json, keys: string[]): string | null {
 
 /** Normalises `tags` whether it arrives as an array or a comma-separated string. */
 export function extractTags(payload: Json): string[] {
-  const scopes: Json[] = [payload];
-  for (const nested of ["contact", "customData", "custom_data", "data"]) {
-    const value = payload[nested];
-    if (isObject(value)) scopes.push(value);
-  }
-
-  for (const scope of scopes) {
-    for (const key of ["tags", "tag", "contact_tags"]) {
-      const value = scope[key];
+  for (const scope of scopesOf(payload)) {
+    for (const key of ["tags", "tag", "contacttags"]) {
+      const value = scope.get(key);
       if (Array.isArray(value)) {
         const tags = value
           .filter((t): t is string => typeof t === "string")
@@ -134,6 +149,7 @@ export type ParsedLead = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  address: string | null;
   postcode: string | null;
   lead_type: LeadType | null;
   source: string | null;
@@ -153,6 +169,7 @@ export function parseGhlLead(payload: Json): ParsedLead {
     name: extractName(payload),
     email: pick(payload, ["email", "email_address", "emailAddress"]),
     phone: pick(payload, ["phone", "phone_number", "phoneNumber", "mobile"]),
+    address: pick(payload, ["address", "address1", "full_address", "street_address", "street"]),
     postcode: extractPostcode(payload),
     lead_type: extractLeadType(payload, ghl_tags),
     source: extractSource(payload),

@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
       name: lead.name,
       email: lead.email,
       phone: lead.phone,
+      address: lead.address,
       postcode: lead.postcode,
       lead_type: lead.lead_type,
       source: lead.source,

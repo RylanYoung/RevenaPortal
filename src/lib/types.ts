@@ -109,6 +109,7 @@ export type Lead = {
   name: string | null;
   phone: string | null;
   email: string | null;
+  address: string | null;
   postcode: string | null;
   lead_type: LeadType | null;
   source: string | null;

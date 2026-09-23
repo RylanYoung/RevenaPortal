@@ -79,6 +79,7 @@ create table if not exists leads (
   name text,
   phone text,
   email text,
+  address text,                                  -- street address; an installer needs somewhere to drive to
   postcode text,
   lead_type text check (lead_type in ('residential', 'commercial')),
   source text,                                   -- campaign / ad name from GHL
@@ -146,6 +147,7 @@ alter table leads add constraint leads_flag_reason_check
 -- Whether a lead counts is no longer purely a function of its status. An
 -- admin can exclude one by hand, and a client can be set so incoming leads
 -- arrive excluded and have to be accepted before they count.
+alter table leads add column if not exists address text;
 alter table leads add column if not exists excluded_from_pack boolean not null default false;
 alter table clients add column if not exists auto_count_leads boolean not null default true;
 
