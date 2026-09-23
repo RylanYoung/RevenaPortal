@@ -211,11 +211,17 @@ export function matchClientByTag(
   tags: string[],
   clients: { id: string; ghl_tag_reference: string | null }[]
 ): { clientId: string | null; ambiguous: boolean; matchedTag: string | null } {
-  const lowerTags = tags.map((t) => t.toLowerCase());
+  // Case has never mattered. Whitespace did: a tag saved as "silver click "
+  // with a trailing space, or typed with a double space, failed to match and
+  // the lead went to the unassigned queue for no visible reason. Separators
+  // are deliberately NOT stripped — collapsing "solar-nsw" and "solarnsw"
+  // into one key could deliver a lead to a business that didn't buy it.
+  const normalize = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");
+
+  const payloadTags = tags.map(normalize);
 
   const matches = clients.filter(
-    (c) =>
-      c.ghl_tag_reference && lowerTags.includes(c.ghl_tag_reference.toLowerCase())
+    (c) => c.ghl_tag_reference && payloadTags.includes(normalize(c.ghl_tag_reference))
   );
 
   if (matches.length === 1) {
