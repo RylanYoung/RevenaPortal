@@ -1,13 +1,15 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { flagLead, setOutcome, saveNote } from "@/app/portal/actions";
+import { flagLead, setStage, saveNote } from "@/app/portal/actions";
 import {
   FLAG_REASONS,
-  OUTCOMES,
-  OUTCOME_LABELS,
+  PIPELINE_STAGES,
+  STAGE_LABELS,
+  LEGACY_STAGE_LABELS,
+  CLOSED_STAGES,
   type Lead,
-  type Outcome,
+  type Stage,
 } from "@/lib/types";
 import { extraDetails } from "@/lib/lead-details";
 import { LeadStatusBadge, formatDateTime, formatDate } from "./ui";
@@ -26,8 +28,8 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
   const [showDetails, setShowDetails] = useState(false);
 
   // Optimistic: the pill highlights the moment it's tapped.
-  const [outcome, setLocalOutcome] = useState<Outcome | null>(lead.outcome);
-  const [, startOutcome] = useTransition();
+  const [stage, setLocalStage] = useState<Stage | null>(lead.outcome);
+  const [, startStage] = useTransition();
 
   const [noteResult, noteAction, notePending] = useActionState(saveNote, null);
   const [flagResult, flagAction, flagPending] = useActionState(flagLead, null);
@@ -38,18 +40,29 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
   const canFlag = lead.status === "delivered";
   const details = extraDetails(lead);
 
-  function pick(next: Outcome) {
-    const value = outcome === next ? null : next; // Tapping again clears it.
-    setLocalOutcome(value);
-    startOutcome(() => setOutcome(lead.id, value));
+  function pick(next: Stage) {
+    const value = stage === next ? null : next; // Tapping again clears it.
+    setLocalStage(value);
+    startStage(() => setStage(lead.id, value));
   }
+
+  // A value from the old, shorter list. Shown so the lead doesn't look
+  // untouched, but it isn't one of the stages on offer.
+  const legacy = stage && !(PIPELINE_STAGES as readonly string[]).includes(stage)
+    ? LEGACY_STAGE_LABELS[stage] ?? stage
+    : null;
 
   return (
     <div className="card p-6">
       {/* ---- the lead ---- */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-xl font-semibold">{lead.name ?? "New lead"}</h3>
+          <h3 className="text-xl font-semibold">
+            {lead.business_name ?? lead.name ?? "New lead"}
+          </h3>
+          {lead.business_name && lead.name && (
+            <div className="text-body">{lead.name}</div>
+          )}
 
           <div className="mt-2 flex flex-col gap-1 text-base">
             {lead.phone && (
@@ -151,10 +164,17 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
 
       {/* ---- one-tap status ---- */}
       <div className="mt-5 border-t border-line pt-4">
-        <div className="text-sm text-muted mb-3">Where&apos;s it at?</div>
+        <div className="text-sm text-muted mb-3">
+          Where&apos;s it at?
+          {legacy && (
+            <span className="ml-2 text-xs">previously marked &ldquo;{legacy}&rdquo;</span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
-          {OUTCOMES.map((o) => {
-            const on = outcome === o;
+          {PIPELINE_STAGES.map((o) => {
+            const on = stage === o;
+            // A dead end reads as an ending, not another step forward.
+            const ending = CLOSED_STAGES.includes(o) && o !== "closed";
             return (
               <button
                 key={o}
@@ -162,11 +182,13 @@ export function PortalLeadCard({ lead }: { lead: Lead }) {
                 aria-pressed={on}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
                   on
-                    ? "bg-blue text-white"
+                    ? ending
+                      ? "bg-muted text-white"
+                      : "bg-blue text-white"
                     : "bg-panel text-body hover:text-navy"
                 }`}
               >
-                {OUTCOME_LABELS[o]}
+                {STAGE_LABELS[o]}
               </button>
             );
           })}

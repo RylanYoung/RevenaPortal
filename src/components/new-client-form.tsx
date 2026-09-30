@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createClient } from "@/app/admin/actions";
-import { SERVICE_TYPES } from "@/lib/types";
+import { SERVICE_TYPE_CHOICES } from "@/lib/types";
 
 export function NewClientForm() {
   const [open, setOpen] = useState(false);
@@ -64,8 +64,8 @@ export function NewClientForm() {
           <label className="label" htmlFor="service_type">
             Service type
           </label>
-          <select id="service_type" name="service_type" className="field" defaultValue="both">
-            {SERVICE_TYPES.map((t) => (
+          <select id="service_type" name="service_type" className="field" defaultValue="residential">
+            {SERVICE_TYPE_CHOICES.map((t) => (
               <option key={t} value={t}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </option>

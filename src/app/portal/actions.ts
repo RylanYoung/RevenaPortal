@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase-server";
-import { FLAG_REASONS, OUTCOMES, type FlagReason, type Outcome } from "@/lib/types";
+import { FLAG_REASONS, PIPELINE_STAGES, type FlagReason, type Stage } from "@/lib/types";
 
 /**
  * Client-side mutations. All of these run through the ANON key, so RLS decides
@@ -53,15 +53,15 @@ export async function flagLead(
  * touches delivery status or pack counts.
  */
 /**
- * Sets (or clears) the client's own status for a lead — one tap, no form.
+ * Moves a lead to a pipeline stage — one tap, no form.
  *
  * Deliberately separate from saveNote. When both lived in one action, saving
  * a note also wrote whatever the outcome field happened to hold, so a form
  * that didn't carry an outcome would silently clear it.
  */
-export async function setOutcome(leadId: string, outcome: Outcome | null) {
+export async function setStage(leadId: string, outcome: Stage | null) {
   if (!leadId) return;
-  if (outcome && !(OUTCOMES as readonly string[]).includes(outcome)) return;
+  if (outcome && !(PIPELINE_STAGES as readonly string[]).includes(outcome)) return;
 
   const db = await supabaseServer();
   await db.from("leads").update({ outcome }).eq("id", leadId);

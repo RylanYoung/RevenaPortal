@@ -171,6 +171,7 @@ export type ParsedLead = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  business_name: string | null;
   address: string | null;
   postcode: string | null;
   lead_type: LeadType | null;
@@ -191,6 +192,7 @@ export function parseGhlLead(payload: Json): ParsedLead {
     name: extractName(payload),
     email: pick(payload, ["email", "email_address", "emailAddress"]),
     phone: pick(payload, ["phone", "phone_number", "phoneNumber", "mobile"]),
+    business_name: pick(payload, ["business_name", "businessName", "company", "company_name", "companyName", "business"]),
     address: pick(payload, ["address", "address1", "full_address", "street_address", "street"]),
     postcode: extractPostcode(payload),
     lead_type: extractLeadType(payload, ghl_tags),

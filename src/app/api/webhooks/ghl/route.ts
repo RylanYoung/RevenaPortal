@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   // ---- route to a client by tag ----
   const { data: clients, error: clientsError } = await db
     .from("clients")
-    .select("id, ghl_tag_reference, status, auto_count_leads")
+    .select("id, ghl_tag_reference, status, auto_count_leads, service_type")
     .not("ghl_tag_reference", "is", null);
 
   if (clientsError) {
@@ -126,9 +126,16 @@ export async function POST(request: NextRequest) {
       name: lead.name,
       email: lead.email,
       phone: lead.phone,
+      business_name: lead.business_name,
       address: lead.address,
       postcode: lead.postcode,
-      lead_type: lead.lead_type,
+      // Every client is residential or commercial, so a lead with nothing in
+      // the payload inherits its client's type rather than staying blank.
+      lead_type:
+        lead.lead_type ??
+        (matchedClient && matchedClient.service_type !== "both"
+          ? matchedClient.service_type
+          : null),
       source: lead.source,
       ghl_contact_id: lead.ghl_contact_id,
       ghl_tags: lead.ghl_tags,

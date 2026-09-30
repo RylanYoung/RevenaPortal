@@ -1,8 +1,18 @@
 // Shared shapes, kept in step with supabase/schema.sql by hand.
 // If you change a CHECK constraint there, change the union here too.
 
+/**
+ * A client is residential or commercial, not both.
+ *
+ * "both" stays in the union because a client was set to it before this rule
+ * existed and removing the value would make that row illegal. It is no longer
+ * offered anywhere — see SERVICE_TYPE_CHOICES.
+ */
 export const SERVICE_TYPES = ["residential", "commercial", "both"] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
+
+/** What a client may actually be set to. */
+export const SERVICE_TYPE_CHOICES = ["residential", "commercial"] as const;
 
 export const CLIENT_STATUSES = ["active", "paused", "churned"] as const;
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];
@@ -39,16 +49,51 @@ export const FLAG_REASONS = [
 ] as const;
 export type FlagReason = (typeof FLAG_REASONS)[number];
 
-/** The client's own sales pipeline stage. Never affects pack counts. */
-export const OUTCOMES = [
-  "contacted",
-  "booked",
-  "quoted",
-  "won",
+/**
+ * The client's own sales pipeline. Never affects pack counts.
+ *
+ * Ordered as the sale actually runs, so the stage row reads left to right the
+ * way the job progresses. The same stages serve residential and commercial —
+ * a bigger commercial deal takes longer through them, not a different path.
+ */
+export const PIPELINE_STAGES = [
+  "new",
+  "interested",
+  "site_visit_booked",
+  "site_visit_attended",
+  "closed",
+  "not_interested",
+  "no_show",
   "lost",
-  "no_response",
 ] as const;
-export type Outcome = (typeof OUTCOMES)[number];
+export type Stage = (typeof PIPELINE_STAGES)[number];
+
+export const STAGE_LABELS: Record<Stage, string> = {
+  new: "New lead",
+  interested: "Interested",
+  site_visit_booked: "Site visit booked",
+  site_visit_attended: "Site visit attended",
+  closed: "Closed",
+  not_interested: "Not interested",
+  no_show: "No show",
+  lost: "Lost",
+};
+
+/** The stages that mean the job is over, one way or the other. */
+export const CLOSED_STAGES: Stage[] = ["closed", "not_interested", "no_show", "lost"];
+
+/**
+ * Values from the earlier, shorter list. Still valid in the database so rows
+ * carrying one stay legal, but no longer offered — a lead holding one shows
+ * what it was and waits to be moved onto the new pipeline.
+ */
+export const LEGACY_STAGE_LABELS: Record<string, string> = {
+  contacted: "Contacted",
+  booked: "Booked",
+  quoted: "Quoted",
+  won: "Won",
+  no_response: "No response",
+};
 
 export const LEAD_TYPES = ["residential", "commercial"] as const;
 export type LeadType = (typeof LEAD_TYPES)[number];
@@ -109,6 +154,8 @@ export type Lead = {
   name: string | null;
   phone: string | null;
   email: string | null;
+  /** Trading name, for commercial leads. */
+  business_name: string | null;
   address: string | null;
   postcode: string | null;
   lead_type: LeadType | null;
@@ -120,7 +167,8 @@ export type Lead = {
   flagged_by: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
-  outcome: Outcome | null;
+  /** Pipeline stage. Named  in the database since before the pipeline existed. */
+  outcome: Stage | null;
   crm_notes: string | null;
   follow_up_date: string | null;
   ghl_contact_id: string | null;
@@ -153,11 +201,3 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   request_declined: "Request declined",
 };
 
-export const OUTCOME_LABELS: Record<Outcome, string> = {
-  contacted: "Contacted",
-  booked: "Booked",
-  quoted: "Quoted",
-  won: "Won",
-  lost: "Lost",
-  no_response: "No response",
-};

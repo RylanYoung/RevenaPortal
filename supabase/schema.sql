@@ -122,9 +122,18 @@ create table if not exists leads (
 -- 'booked' was added once setters and the AI agent started writing outcomes
 -- back in; an appointment booked is the step that matters most to a client
 -- and did not fit any of the original values.
+-- The client's pipeline. 'outcome' keeps its column name because it predates
+-- the pipeline; the values are now stages. The earlier, shorter values stay
+-- legal so rows already carrying one remain valid — they are simply no longer
+-- offered, and such a lead shows what it was until someone moves it.
 alter table leads drop constraint if exists leads_outcome_check;
 alter table leads add constraint leads_outcome_check
-  check (outcome in ('contacted', 'booked', 'quoted', 'won', 'lost', 'no_response'));
+  check (outcome in (
+    'new', 'interested', 'site_visit_booked', 'site_visit_attended',
+    'closed', 'not_interested', 'no_show', 'lost',
+    -- legacy, no longer offered
+    'contacted', 'booked', 'quoted', 'won', 'no_response'
+  ));
 
 -- Flag reasons, reworded. "Uncontactable" invited complaints like "called
 -- four times over three days", which is not grounds for a replacement — a
@@ -148,6 +157,8 @@ alter table leads add constraint leads_flag_reason_check
 -- admin can exclude one by hand, and a client can be set so incoming leads
 -- arrive excluded and have to be accepted before they count.
 alter table leads add column if not exists address text;
+-- Commercial leads carry a trading name separate from the contact's own name.
+alter table leads add column if not exists business_name text;
 alter table leads add column if not exists excluded_from_pack boolean not null default false;
 alter table clients add column if not exists auto_count_leads boolean not null default true;
 

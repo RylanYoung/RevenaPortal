@@ -53,7 +53,8 @@ export function bucketByMonth(leads: Lead[], months = 12): MonthBucket[] {
     if (lead.counts_against_pack) bucket.counted++;
     else bucket.notCounted++;
     if (lead.outcome) bucket.tracked++;
-    if (lead.outcome === "won") bucket.won++;
+    // "closed" is the pipeline's won stage.
+    if (lead.outcome === "closed") bucket.won++;
   }
 
   return buckets;
@@ -76,7 +77,7 @@ export function summarise(leads: Lead[]): Totals {
   const counted = leads.filter((l) => l.counts_against_pack).length;
   const notCounted = total - counted;
   const tracked = leads.filter((l) => l.outcome).length;
-  const won = leads.filter((l) => l.outcome === "won").length;
+  const won = leads.filter((l) => l.outcome === "closed").length;
 
   return {
     total,

@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { OUTCOMES, type Outcome } from "@/lib/types";
+import { PIPELINE_STAGES, type Stage } from "@/lib/types";
 
 /**
  * POST /api/webhooks/ghl/update?key=<GHL_WEBHOOK_SECRET>
@@ -46,20 +46,28 @@ function authorize(request: NextRequest): boolean {
  * "no answer" are what actually arrive. An unrecognised value leaves the outcome
  * untouched rather than guessing, since a wrong outcome is worse than none.
  */
-function normaliseOutcome(raw: string | null): Outcome | null {
+function normaliseOutcome(raw: string | null): Stage | null {
   if (!raw) return null;
   const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
 
-  if ((OUTCOMES as readonly string[]).includes(v)) return v as Outcome;
+  if ((PIPELINE_STAGES as readonly string[]).includes(v)) return v as Stage;
 
-  if (/appoint|booked|scheduled|set/.test(v)) return "booked";
-  if (/quote|estimate|proposal/.test(v)) return "quoted";
-  if (/won|sold|closed_won|signed/.test(v)) return "won";
-  if (/lost|closed_lost|dead|not_interested/.test(v)) return "lost";
-  if (/no_answer|noanswer|unreachable|voicemail|no_response/.test(v)) {
-    return "no_response";
+  // Order matters: "not interested" has to be tested before "interested",
+  // and "no show" before anything that merely mentions a visit.
+  if (/not_interested|uninterested|no_thanks|declined/.test(v)) return "not_interested";
+  if (/no_show|noshow|didnt_attend|missed/.test(v)) return "no_show";
+  if (/attended|visit_done|visit_complete|inspected|assessed/.test(v)) {
+    return "site_visit_attended";
   }
-  if (/contact|spoke|called|answered/.test(v)) return "contacted";
+  if (/appoint|booked|scheduled|site_visit|inspection|set/.test(v)) {
+    return "site_visit_booked";
+  }
+  if (/won|sold|closed|signed|deposit/.test(v)) return "closed";
+  if (/lost|dead/.test(v)) return "lost";
+  if (/interested|warm|keen|quote|proposal|estimate/.test(v)) return "interested";
+  // A call that simply didn't connect leaves the lead where it is — being
+  // unreachable today is not a pipeline stage, and moving it would bury it.
+  if (/no_answer|noanswer|voicemail|unreachable|no_response/.test(v)) return null;
 
   return null;
 }
@@ -193,7 +201,7 @@ export async function GET(request: NextRequest) {
   return Response.json({
     status: "ready",
     message:
-      "Send POST with contact_id plus any of: outcome, note, follow_up_date, actor.",
-    outcomes: OUTCOMES,
+      "Send POST with contact_id plus any of: outcome (a pipeline stage), note, follow_up_date, actor.",
+    stages: PIPELINE_STAGES,
   });
 }

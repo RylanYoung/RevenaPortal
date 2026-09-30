@@ -25,6 +25,10 @@ const SKIP = new Set([
   "fullname",
   "name",
   "contact_name",
+  "business_name",
+  "businessname",
+  "company",
+  "company_name",
   "email",
   "email_address",
   "emailaddress",
@@ -43,11 +47,6 @@ const SKIP = new Set([
   "post_code",
   "zip",
   "zip_code",
-  // Not shown by request — it comes through in the payload and is still
-  // stored on the lead, it just isn't surfaced.
-  "homeowner",
-  "homeownerstatus",
-  "homeowner_status",
   "tags",
   "tag",
   "contact_tags",
@@ -67,6 +66,43 @@ const SKIP = new Set([
 ]);
 
 export type Detail = { label: string; value: string };
+
+/**
+ * The funnel answers, in the order a salesperson wants them.
+ *
+ * Bill size and timeline first — those decide whether the call is worth making.
+ * Anything not listed still shows, just after these and under a label derived
+ * from the key, so a new funnel question needs no code change.
+ *
+ * Several spellings map to one label because the residential and commercial
+ * funnels name the same idea differently.
+ */
+const KNOWN_FIELDS: { match: string[]; label: string }[] = [
+  // --- residential ---
+  { match: ["quarterlybill", "electricitybill", "currentbill", "bill", "quarterlyelectricitybill"], label: "Electricity bill" },
+  { match: ["installtimeframe", "timeframe", "timeline", "howsoon", "installtimeline"], label: "Looking to install" },
+  { match: ["solarstatus", "systeminstalled", "haveso1ar", "existingsolar", "alreadyhavesolar"], label: "Existing system" },
+  { match: ["homeownerstatus", "homeowner", "ownhome"], label: "Homeowner" },
+  // --- commercial ---
+  { match: ["decisionmaker", "isdecisionmaker"], label: "Decision maker" },
+  { match: ["ownorlease", "ownlease", "premises", "ownsorleases"], label: "Owns or leases" },
+  { match: ["leaseduration", "leaselength", "leaseremaining", "leasebracket"], label: "Lease remaining" },
+  { match: ["lookingat", "interestedin", "solarbatteryboth", "productinterest"], label: "Looking at" },
+  { match: ["businessorhome", "propertytype"], label: "Property type" },
+];
+
+function knownLabel(normalized: string): string | null {
+  for (const f of KNOWN_FIELDS) {
+    if (f.match.includes(normalized)) return f.label;
+  }
+  return null;
+}
+
+/** Position in KNOWN_FIELDS, or the end for anything unrecognised. */
+function rank(label: string): number {
+  const i = KNOWN_FIELDS.findIndex((f) => f.label === label);
+  return i === -1 ? KNOWN_FIELDS.length : i;
+}
 
 /** "roof_type" and "roofType" both become "Roof type". */
 function prettyLabel(key: string): string {
@@ -120,7 +156,8 @@ export function extraDetails(lead: Lead): Detail[] {
       const text = readable(value);
       if (!text) continue;
 
-      const label = prettyLabel(key);
+      const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const label = knownLabel(normalized) ?? prettyLabel(key);
       const dedupe = `${label}|${text}`;
       if (seen.has(dedupe)) continue;
       seen.add(dedupe);
@@ -131,5 +168,10 @@ export function extraDetails(lead: Lead): Detail[] {
 
   walk(payload as Record<string, unknown>, 0);
 
-  return out.sort((a, b) => a.label.localeCompare(b.label));
+  // Known funnel answers first, in their documented order; everything else
+  // alphabetically after them.
+  return out.sort((a, b) => {
+    const byRank = rank(a.label) - rank(b.label);
+    return byRank !== 0 ? byRank : a.label.localeCompare(b.label);
+  });
 }

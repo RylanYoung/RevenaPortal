@@ -44,7 +44,6 @@ export const ONBOARDING: Section[] = [
         options: [
           { value: "residential", label: "Residential" },
           { value: "commercial", label: "Commercial" },
-          { value: "both", label: "Both" },
         ],
       },
       {
